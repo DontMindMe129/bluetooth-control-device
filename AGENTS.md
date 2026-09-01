@@ -32,13 +32,16 @@ Treat the following as intended resource allocation, not as proof that detailed 
 | OLED | I2C1 on PB6/PB7 |
 | ADXL345 | I2C2 on PB10/PB11, with EXTI on PA1 |
 | DHT11 | TIM3 channel 4 input capture on PB1 |
-| Servo | TIM3 channel 2 PWM on PB5 |
+| Servo/PWM output | TIM2 channel 1 PWM on PA0 |
 | Buttons | PA4-PA7 and PB0 through EXTI |
 | Five digital outputs | PB12-PB15 and PA8 |
+| Heartbeat LED | PC13, active-low |
 
-- Complete detailed peripheral parameters, interrupt enablement and priorities, edge selection, pull configuration, timer values, timing, and timeouts only as each module's requirements are supplied.
+- Re-read the `.ioc` and generated source after every CubeMX regeneration before relying on the details below.
 - The generated runtime currently uses HSI as the 8 MHz system clock. PD0/PD1 are reserved as HSE oscillator pins in the `.ioc`; do not infer that HSE is active.
-- The GPIO inputs allocated to EXTI are currently generated as rising-edge interrupt inputs, but only the USART2 peripheral IRQ is enabled and implemented in the generated NVIC/interrupt files. Do not claim that the EXTI paths are operational until their configuration and handlers exist.
+- The five UI buttons on PA4-PA7 and PB0 are generated as falling-edge EXTI inputs with internal pull-ups. Their EXTI IRQs use preemption priority 1, subpriority 0.
+- The ADXL345 interrupt input on PA1 is generated as EXTI1 with no internal pull and shares EXTI priority 1, subpriority 0.
+- TIM3 input capture uses priority 0, subpriority 0. I2C1 event/error, I2C2 event/error, and USART2 use priority 2, subpriority 0. The corresponding generated IRQ handlers are present.
 - SWD remains enabled on PA13/PA14, with JTAG disabled. Preserve SWD access unless the user explicitly approves a configuration change.
 
 ## Ownership and edit boundaries

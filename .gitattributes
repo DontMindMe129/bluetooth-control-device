@@ -1,0 +1,27 @@
+# Normalize repository text so CubeMX and editors on different operating
+# systems do not create diffs containing only line-ending changes.
+* text=auto
+
+*.c            text eol=lf
+*.h            text eol=lf
+*.s            text eol=lf
+*.ld           text eol=lf
+*.cmake        text eol=lf
+CMakeLists.txt text eol=lf
+*.json         text eol=lf
+*.md           text eol=lf
+*.txt          text eol=lf
+*.yml          text eol=lf
+*.yaml         text eol=lf
+*.ioc          text eol=lf
+.mxproject     text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+.clangd        text eol=lf
+
+# Keep binary artifacts byte-for-byte if any are intentionally added later.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary

@@ -8,24 +8,33 @@ Một firmware dễ bảo trì cần tách ba câu hỏi:
 2. Dữ liệu từ thiết bị được đọc/ghi như thế nào?
 3. Hệ thống quyết định làm gì với dữ liệu đó?
 
-Project trả lời bằng bốn tầng `Board → Drivers → Services → App`.
+Project trả lời bằng bốn vùng trách nhiệm `Board`, `Drivers`, `Services` và `App`.
+Các mũi tên dưới đây biểu diễn **quan hệ phụ thuộc của source**: module ở đầu
+mũi tên sử dụng API hoặc kiểu dữ liệu của module ở cuối mũi tên.
 
 ```mermaid
 flowchart TB
-    CUBE[CubeMX / Core<br/>clock · GPIO · peripheral · NVIC]
-    BOARD[Board<br/>ánh xạ thiết bị vào phần cứng]
-    DRIVER[Drivers<br/>giao tiếp peripheral và thiết bị]
-    SERVICE[Services<br/>thuật toán · UI · feedback]
-    APP[App<br/>policy và điều phối]
     MAIN[main.c<br/>khởi tạo và superloop]
+    APP[App<br/>policy và điều phối]
+    SERVICE[Services<br/>thuật toán · UI · feedback]
+    DRIVER[Drivers<br/>giao tiếp peripheral và thiết bị]
+    BOARD[Board<br/>ánh xạ thiết bị vào phần cứng]
+    HAL[STM32 HAL / Core handles]
+    CUBE[CubeMX labels<br/>main.h]
 
-    CUBE --> BOARD
-    BOARD --> APP
-    DRIVER --> SERVICE
-    SERVICE --> APP
     MAIN --> APP
     APP --> DRIVER
+    APP --> SERVICE
+    APP --> BOARD
+    SERVICE --> DRIVER
+    DRIVER --> HAL
+    BOARD --> CUBE
 ```
+
+Đây không phải luồng dữ liệu runtime. Dữ liệu khi firmware chạy thường đi theo
+chiều `cảm biến → driver → service → App → OLED/ngõ ra`, trong khi thao tác nút
+đi theo chiều `EXTI → driver nút → App → service/driver đầu ra`. Vì hai khái niệm
+này khác nhau nên sơ đồ phụ thuộc phía trên không tạo vòng tròn.
 
 ## `Core/`: code do CubeMX quản lý
 
