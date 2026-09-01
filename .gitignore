@@ -1,0 +1,56 @@
+# Build output
+build/
+cmake-build-*/
+Debug/
+Release/
+RelWithDebInfo/
+
+# CMake/Ninja generated files outside build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Compiled firmware artifacts
+*.elf
+*.map
+*.bin
+*.hex
+*.list
+*.lss
+*.su
+*.o
+*.obj
+*.d
+
+# STM32CubeMX temporary files
+mx.scratch/
+*.ioc.lock
+
+# Cube package content not used by this target. Keep only the CMSIS headers
+# referenced by cmake/stm32cubemx/CMakeLists.txt.
+Drivers/CMSIS/Core/
+Drivers/CMSIS/Core_A/
+Drivers/CMSIS/DSP/
+Drivers/CMSIS/Lib/
+Drivers/CMSIS/NN/
+Drivers/CMSIS/RTOS/
+Drivers/CMSIS/RTOS2/
+Drivers/CMSIS/docs/
+Drivers/CMSIS/Device/ST/STM32F1xx/Source/
+
+# Editor and operating-system noise
+.idea/
+*.swp
+*.swo
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# Keep repository-owned STM32/VS Code settings
+!.settings/
+!.vscode/

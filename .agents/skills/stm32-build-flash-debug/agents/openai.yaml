@@ -1,0 +1,4 @@
+interface:
+  display_name: "STM32 Build, Flash, and Debug"
+  short_description: "Build and inspect STM32 GCC firmware safely"
+  default_prompt: "Use $stm32-build-flash-debug to build this STM32 project and diagnose any toolchain errors."

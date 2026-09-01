@@ -1,0 +1,4 @@
+interface:
+  display_name: "STM32 Firmware Development"
+  short_description: "Develop and review STM32 bare-metal firmware"
+  default_prompt: "Use $stm32-firmware-development to implement a non-blocking STM32 HAL firmware change."
