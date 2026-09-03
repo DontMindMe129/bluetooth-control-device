@@ -107,7 +107,7 @@ typedef enum
 typedef struct
 {
     I2cBus_t *i2c_bus;              /**< Bus I2C đã được khởi tạo và service riêng trong superloop. */
-    uint8_t address_7bit;           /**< Địa chỉ SSD1306 đã được phát hiện: 0x3C hoặc 0x3D. */
+    uint8_t address_7bit;           /**< Địa chỉ SSD1306 7-bit do tầng Board/App cung cấp. */
     uint32_t transfer_timeout_ms;   /**< Timeout cho mỗi lần giành bus và mỗi giao dịch I2C. */
     uint8_t contrast;               /**< Contrast controller từ 0 đến 255. */
     Ssd1306_Orientation_t orientation; /**< Hướng ánh xạ vật lý mong muốn. */

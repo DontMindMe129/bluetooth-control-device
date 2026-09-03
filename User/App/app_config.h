@@ -88,8 +88,8 @@
 /** @brief Thời gian LED heartbeat tắt trong mỗi chu kỳ. */
 #define APP_HEARTBEAT_OFF_TIME_MS              (750UL)
 
-/** @brief Timeout đã duyệt cho mỗi địa chỉ trong quá trình dò bus OLED. */
-#define APP_OLED_SCAN_PROBE_TIMEOUT_MS          (5UL)
+/** @brief Timeout đã duyệt cho lần probe địa chỉ OLED cố định khi thiết bị offline. */
+#define APP_OLED_PROBE_TIMEOUT_MS               (5UL)
 
 /** @brief Timeout đã duyệt cho mỗi lần giành bus hoặc truyền dữ liệu SSD1306. */
 #define APP_OLED_TRANSFER_TIMEOUT_MS            (150UL)
@@ -103,17 +103,14 @@
 /** @brief Số lỗi NACK liên tiếp trước khi xác nhận OLED offline. */
 #define APP_OLED_NACK_OFFLINE_THRESHOLD          (3U)
 
-/** @brief Số lần bus-clear tối đa trong một đợt lỗi vật lý I2C1. */
-#define APP_OLED_BUS_RECOVERY_ATTEMPT_LIMIT      (2U)
+/** @brief Số lần bus-clear tối đa trong một đợt lỗi vật lý của I2C1 dùng chung. */
+#define APP_SHARED_I2C_BUS_RECOVERY_ATTEMPT_LIMIT (2U)
 
-/** @brief Khoảng nghỉ giữa hai lần bus-clear I2C1. */
-#define APP_OLED_BUS_RECOVERY_DELAY_MS           (300UL)
+/** @brief Khoảng nghỉ giữa hai lần bus-clear I2C1 dùng chung. */
+#define APP_SHARED_I2C_BUS_RECOVERY_DELAY_MS      (300UL)
 
 /** @brief Chu kỳ probe OLED khi thiết bị đang được xem là offline. */
 #define APP_OLED_OFFLINE_PROBE_PERIOD_MS         (2000UL)
-
-/** @brief Số địa chỉ I2C tối đa lưu lại trong lần scan phục vụ kiểm thử OLED. */
-#define APP_OLED_SCAN_ADDRESS_CAPACITY          (8U)
 
 /** @brief Contrast ban đầu của SSD1306 theo giá trị reset mặc định. */
 #define APP_OLED_INITIAL_CONTRAST                (0x7FU)

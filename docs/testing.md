@@ -63,15 +63,16 @@ Gửi `help\r\n`, `echo one two 123\r\n` và một lệnh không tồn tại.
 - [ ] UART chỉ log khi trạng thái thay đổi.
 - [ ] Kết nối lại: probe tối đa 2 giây và khôi phục trang hiện tại.
 
-### 8. I2C1 bị giữ thấp
+### 8. I2C1 dùng chung bị giữ thấp
 
 Chỉ fault-injection khi hiểu mạch. Nên dùng điện trở khoảng 1 kΩ kéo SDA hoặc SCL xuống GND thay vì chập tùy tiện.
 
 - [ ] Firmware bus-clear tối đa 2 lần, cách nhau 300 ms.
 - [ ] Mỗi lần phát không quá 9 xung SCL rồi tạo STOP.
 - [ ] Không phục hồi được thì OLED offline.
-- [ ] I2C2/ADXL345, UART, nút và heartbeat vẫn chạy.
-- [ ] Bỏ lỗi: OLED được probe và online lại.
+- [ ] Trong lúc bus-clear, ADXL345 không mở giao dịch I2C mới; dữ liệu Motion có thể tạm stale.
+- [ ] UART, DHT11, nút và heartbeat vẫn chạy vì không phụ thuộc I2C1.
+- [ ] Bỏ lỗi: OLED online lại và ADXL345 được khởi tạo lại tại `0x53`.
 
 ## Biến debugger quan trọng
 
@@ -80,8 +81,9 @@ s_app.status.oled_state
 s_app.status.oled_error
 s_app.status.oled_fast_attempt_count
 s_app.status.oled_consecutive_nack_count
-s_app.status.oled_bus_recovery_attempt_count
-s_app.status.oled_bus_recovery_state
+s_app.status.shared_i2c_bus
+s_app.status.shared_i2c_bus_recovery_attempt_count
+s_app.status.shared_i2c_bus_recovery_state
 s_app.status.environment
 s_app.status.adxl345
 s_app.status.motion_monitor
@@ -92,4 +94,4 @@ s_app.status.effective_output_mask
 
 ## Tiêu chí đạt cuối cùng
 
-Chạy xen kẽ chuyển trang, UART, cảm biến, nút, output và lỗi OLED trong ít nhất 5 phút. Không được có reset ngoài ý muốn, heartbeat dừng, output kẹt sau warning hoặc lỗi I2C1 làm I2C2 ngừng hoạt động.
+Chạy xen kẽ chuyển trang, UART, cảm biến, nút, output và lỗi I2C1 trong ít nhất 5 phút. Không được có reset ngoài ý muốn, heartbeat dừng, output kẹt sau warning hoặc giao dịch OLED/ADXL345 lấy nhầm kết quả của nhau.

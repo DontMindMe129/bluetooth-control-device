@@ -25,9 +25,8 @@ typedef struct
     GpioOutput_t digital_outputs[OUTPUT_CONTROL_COUNT];
     GpioOutput_t heartbeat_led;
     SystemHeartbeat_t heartbeat;
-    I2cBus_t oled_i2c_bus;
-    I2cBusRecovery_t oled_bus_recovery;
-    I2cBus_t adxl345_i2c_bus;
+    I2cBus_t shared_i2c_bus;
+    I2cBusRecovery_t shared_i2c_bus_recovery;
     Adxl345_t adxl345;
     Ssd1306_t oled;
     MonoGraphics_Canvas_t oled_canvas;
@@ -49,10 +48,8 @@ typedef struct
     char pc_log_format_buffer[APP_UART_LOG_FORMAT_BUFFER_CAPACITY];
     char command_line_buffer[APP_COMMAND_LINE_BUFFER_CAPACITY];
     char *command_argument_vector[APP_COMMAND_MAX_ARGUMENTS];
-    uint8_t oled_scan_addresses[APP_OLED_SCAN_ADDRESS_CAPACITY];
     uint32_t servo_pwm_led_test_step_start_tick_ms;
     uint32_t oled_state_start_tick_ms;
-    uint8_t oled_probe_address_7bit;
     App_Status_t status;
     bool oled_driver_initialized;
     bool is_initialized;
@@ -61,6 +58,13 @@ typedef struct
 static App_InternalContext_t s_app;
 
 static void app_request_current_page_redraw(void);
+
+/** @brief true khi App đang giữ độc quyền I2C1 để chờ hoặc thực hiện bus-clear. */
+static bool app_shared_i2c_recovery_is_active(void)
+{
+    return (s_app.status.oled_state == APP_OLED_BUS_RECOVERY_WAIT) ||
+           (s_app.status.oled_state == APP_OLED_BUS_RECOVERING);
+}
 
 /** @brief Kiểm tra elapsed time an toàn khi HAL tick tràn số. */
 static bool app_time_has_elapsed(uint32_t current_tick_ms,
@@ -165,7 +169,7 @@ static bool app_start_oled_initialization(uint32_t current_tick_ms)
 {
     const Ssd1306_Config_t config =
     {
-        .i2c_bus = &s_app.oled_i2c_bus,
+        .i2c_bus = &s_app.shared_i2c_bus,
         .address_7bit = s_app.status.oled_selected_address_7bit,
         .transfer_timeout_ms = APP_OLED_TRANSFER_TIMEOUT_MS,
         .contrast = APP_OLED_INITIAL_CONTRAST,
@@ -183,6 +187,24 @@ static bool app_start_oled_initialization(uint32_t current_tick_ms)
     return true;
 }
 
+/** @brief Khởi động lại state machine ADXL345 sau khi context I2C1 được tạo lại. */
+static void app_restart_adxl345(uint32_t current_tick_ms)
+{
+    const Adxl345_Config_t config =
+    {
+        .i2c_bus = &s_app.shared_i2c_bus,
+        .address_7bit = BOARD_ADXL345_I2C_ADDRESS_7BIT,
+        .data_ready_pin = BOARD_ADXL345_INTERRUPT_PIN,
+        .transfer_timeout_ms = APP_ADXL345_TRANSFER_TIMEOUT_MS,
+        .initialize_retry_delay_ms = APP_ADXL345_INIT_RETRY_DELAY_MS,
+        .stale_timeout_ms = APP_ADXL345_STALE_TIMEOUT_MS,
+        .initialize_max_attempts = APP_ADXL345_INIT_MAX_ATTEMPTS
+    };
+
+    s_app.status.adxl345_initialize_result =
+        Adxl345_Initialize(&s_app.adxl345, &config, current_tick_ms);
+}
+
 /** @brief Đưa OLED về offline và bắt đầu bộ định thời probe 2 giây. */
 static void app_mark_oled_offline(App_OledError_t error,
                                   uint32_t current_tick_ms)
@@ -190,7 +212,7 @@ static void app_mark_oled_offline(App_OledError_t error,
     s_app.status.oled_error = error;
     s_app.oled_driver_initialized = false;
     s_app.status.oled_fast_attempt_count = 0U;
-    s_app.status.oled_bus_recovery_attempt_count = 0U;
+    s_app.status.shared_i2c_bus_recovery_attempt_count = 0U;
     app_enter_oled_state(APP_OLED_OFFLINE_WAIT, current_tick_ms, "offline");
 }
 
@@ -202,7 +224,7 @@ static void app_handle_oled_transport_failure(App_OledError_t error,
     I2cBus_Result_t result = s_app.status.oled.last_i2c_result;
     bool bus_recovery_required;
 
-    I2cBus_GetStatus(&s_app.oled_i2c_bus, &bus_status);
+    I2cBus_GetStatus(&s_app.shared_i2c_bus, &bus_status);
     bus_recovery_required = bus_status.recovery_is_required ||
                             (result == I2C_BUS_RESULT_ABORT_FAILED);
     s_app.status.oled_error = error;
@@ -239,35 +261,6 @@ static void app_handle_oled_transport_failure(App_OledError_t error,
 
     s_app.status.oled_fast_attempt_count++;
     app_enter_oled_state(APP_OLED_RETRY_WAIT, current_tick_ms, "retry pending");
-}
-
-/**
- * @brief Chọn duy nhất một địa chỉ thuộc tập SSD1306 từ kết quả scan.
- * @param selected_address Nơi nhận địa chỉ nếu tìm thấy đúng một ứng viên.
- * @return Số địa chỉ tương thích tìm thấy trong buffer scan.
- */
-static uint8_t app_count_compatible_oled_addresses(uint8_t *selected_address)
-{
-    uint8_t index;
-    uint8_t compatible_count = 0U;
-
-    *selected_address = 0U;
-
-    for (index = 0U;
-         index < s_app.status.oled_i2c_bus.scan_stored_count;
-         index++)
-    {
-        const uint8_t address = s_app.oled_scan_addresses[index];
-
-        if ((address == SSD1306_ADDRESS_LOW_7BIT) ||
-            (address == SSD1306_ADDRESS_HIGH_7BIT))
-        {
-            compatible_count++;
-            *selected_address = address;
-        }
-    }
-
-    return compatible_count;
 }
 
 /** @brief Adapter chuyển operation canvas tổng quát sang primitive pixel của SSD1306. */
@@ -491,7 +484,7 @@ static void app_apply_digital_outputs(uint8_t effective_output_mask)
     }
 }
 
-/** @brief Tiến luồng scan, init và refresh page đang chọn trên OLED. */
+/** @brief Tiến luồng init, phục hồi và refresh page đang chọn trên OLED. */
 static void app_service_oled(uint32_t current_tick_ms)
 {
     I2cBus_Operation_t completed_operation;
@@ -508,60 +501,13 @@ static void app_service_oled(uint32_t current_tick_ms)
 
     switch (s_app.status.oled_state)
     {
-        case APP_OLED_SCANNING:
-            if (!I2cBus_TakeResult(&s_app.oled_i2c_bus,
-                                   &completed_operation,
-                                   &bus_result))
-            {
-                break;
-            }
-
-            s_app.status.oled_scan_result = bus_result;
-            I2cBus_GetStatus(&s_app.oled_i2c_bus,
-                             &s_app.status.oled_i2c_bus);
-
-            if ((completed_operation != I2C_BUS_OPERATION_SCAN) ||
-                (bus_result != I2C_BUS_RESULT_SUCCESS) ||
-                s_app.status.oled_i2c_bus.scan_result_overflow)
-            {
-                s_app.status.oled_error = APP_OLED_ERROR_SCAN_RESULT;
-                app_enter_oled_state(APP_OLED_BUS_RECOVERY_WAIT,
-                                     current_tick_ms,
-                                     "scan bus error");
-                break;
-            }
-
-            s_app.status.oled_compatible_address_count =
-                app_count_compatible_oled_addresses(
-                    &s_app.status.oled_selected_address_7bit);
-
-            if (s_app.status.oled_compatible_address_count == 0U)
-            {
-                app_mark_oled_offline(APP_OLED_ERROR_NOT_FOUND,
-                                      current_tick_ms);
-            }
-            else if (s_app.status.oled_compatible_address_count > 1U)
-            {
-                s_app.status.oled_selected_address_7bit = 0U;
-                app_set_oled_error(APP_OLED_ERROR_AMBIGUOUS);
-            }
-            else
-            {
-                s_app.status.oled_fast_attempt_count = 1U;
-                if (!app_start_oled_initialization(current_tick_ms))
-                {
-                    app_set_oled_error(APP_OLED_ERROR_DISPLAY_INIT);
-                }
-            }
-            break;
-
         case APP_OLED_INITIALIZING:
             if (s_app.status.oled.is_ready)
             {
                 s_app.status.oled_error = APP_OLED_ERROR_NONE;
                 s_app.status.oled_fast_attempt_count = 0U;
                 s_app.status.oled_consecutive_nack_count = 0U;
-                s_app.status.oled_bus_recovery_attempt_count = 0U;
+                s_app.status.shared_i2c_bus_recovery_attempt_count = 0U;
                 app_request_current_page_redraw();
                 app_enter_oled_state(APP_OLED_ACTIVE, current_tick_ms,
                                      "online");
@@ -626,19 +572,19 @@ static void app_service_oled(uint32_t current_tick_ms)
         case APP_OLED_BUS_RECOVERY_WAIT:
             if (!app_time_has_elapsed(current_tick_ms,
                                       s_app.oled_state_start_tick_ms,
-                                      APP_OLED_BUS_RECOVERY_DELAY_MS))
+                                      APP_SHARED_I2C_BUS_RECOVERY_DELAY_MS))
             {
                 break;
             }
-            if (s_app.status.oled_bus_recovery_attempt_count >=
-                APP_OLED_BUS_RECOVERY_ATTEMPT_LIMIT)
+            if (s_app.status.shared_i2c_bus_recovery_attempt_count >=
+                APP_SHARED_I2C_BUS_RECOVERY_ATTEMPT_LIMIT)
             {
                 app_mark_oled_offline(s_app.status.oled_error,
                                       current_tick_ms);
                 break;
             }
-            s_app.status.oled_bus_recovery_attempt_count++;
-            if (I2cBusRecovery_Start(&s_app.oled_bus_recovery,
+            s_app.status.shared_i2c_bus_recovery_attempt_count++;
+            if (I2cBusRecovery_Start(&s_app.shared_i2c_bus_recovery,
                                      current_tick_ms))
             {
                 app_enter_oled_state(APP_OLED_BUS_RECOVERING,
@@ -652,39 +598,48 @@ static void app_service_oled(uint32_t current_tick_ms)
             break;
 
         case APP_OLED_BUS_RECOVERING:
-            I2cBusRecovery_Service(&s_app.oled_bus_recovery,
+            I2cBusRecovery_Service(&s_app.shared_i2c_bus_recovery,
                                    current_tick_ms);
-            s_app.status.oled_bus_recovery_state =
-                s_app.oled_bus_recovery.state;
-            if (s_app.oled_bus_recovery.state ==
+            s_app.status.shared_i2c_bus_recovery_state =
+                s_app.shared_i2c_bus_recovery.state;
+            if (s_app.shared_i2c_bus_recovery.state ==
                 I2C_BUS_RECOVERY_SUCCEEDED)
             {
-                s_app.status.oled_i2c_bus_initialized =
-                    I2cBus_Initialize(&s_app.oled_i2c_bus,
-                                      s_app.oled_bus_recovery.config.hal_i2c);
+                s_app.status.shared_i2c_bus_initialized =
+                    I2cBus_Initialize(
+                        &s_app.shared_i2c_bus,
+                        s_app.shared_i2c_bus_recovery.config.hal_i2c);
                 s_app.status.oled_fast_attempt_count = 1U;
-                if (!s_app.status.oled_i2c_bus_initialized ||
-                    !app_start_oled_initialization(current_tick_ms))
+                if (!s_app.status.shared_i2c_bus_initialized)
                 {
                     app_mark_oled_offline(APP_OLED_ERROR_BUS_INIT,
                                           current_tick_ms);
                 }
                 else
                 {
+                    app_restart_adxl345(current_tick_ms);
+                    if (!app_start_oled_initialization(current_tick_ms))
+                    {
+                        app_mark_oled_offline(APP_OLED_ERROR_DISPLAY_INIT,
+                                              current_tick_ms);
+                        break;
+                    }
                     (void)UartLog_Printf(&s_app.pc_log,
-                                         "OLED: bus recovered\r\n");
+                                         "I2C1: shared bus recovered\r\n");
                 }
             }
-            else if (s_app.oled_bus_recovery.state ==
+            else if (s_app.shared_i2c_bus_recovery.state ==
                      I2C_BUS_RECOVERY_FAILED)
             {
                 /* Tạo lại context sạch; lần recovery kế tiếp sẽ DeInit/Init HAL lần nữa. */
-                (void)HAL_I2C_Init(s_app.oled_bus_recovery.config.hal_i2c);
-                s_app.status.oled_i2c_bus_initialized =
-                    I2cBus_Initialize(&s_app.oled_i2c_bus,
-                                      s_app.oled_bus_recovery.config.hal_i2c);
-                if (s_app.status.oled_bus_recovery_attempt_count <
-                    APP_OLED_BUS_RECOVERY_ATTEMPT_LIMIT)
+                (void)HAL_I2C_Init(
+                    s_app.shared_i2c_bus_recovery.config.hal_i2c);
+                s_app.status.shared_i2c_bus_initialized =
+                    I2cBus_Initialize(
+                        &s_app.shared_i2c_bus,
+                        s_app.shared_i2c_bus_recovery.config.hal_i2c);
+                if (s_app.status.shared_i2c_bus_recovery_attempt_count <
+                    APP_SHARED_I2C_BUS_RECOVERY_ATTEMPT_LIMIT)
                 {
                     app_enter_oled_state(APP_OLED_BUS_RECOVERY_WAIT,
                                          current_tick_ms,
@@ -703,20 +658,20 @@ static void app_service_oled(uint32_t current_tick_ms)
                                      s_app.oled_state_start_tick_ms,
                                      APP_OLED_OFFLINE_PROBE_PERIOD_MS))
             {
-                s_app.oled_probe_address_7bit =
-                    (s_app.status.oled_selected_address_7bit != 0U)
-                        ? s_app.status.oled_selected_address_7bit
-                        : SSD1306_ADDRESS_LOW_7BIT;
-                if (I2cBus_StartProbe(&s_app.oled_i2c_bus,
-                                      s_app.oled_probe_address_7bit,
-                                      current_tick_ms,
-                                      APP_OLED_SCAN_PROBE_TIMEOUT_MS) ==
-                    I2C_BUS_START_ACCEPTED)
+                I2cBus_StartResult_t probe_start_result = I2cBus_StartProbe(
+                    &s_app.shared_i2c_bus,
+                    BOARD_OLED_I2C_ADDRESS_7BIT,
+                    current_tick_ms,
+                    APP_OLED_PROBE_TIMEOUT_MS);
+
+                if (probe_start_result == I2C_BUS_START_ACCEPTED)
                 {
                     app_enter_oled_state(APP_OLED_OFFLINE_PROBING,
                                          current_tick_ms, NULL);
                 }
-                else
+                else if ((probe_start_result != I2C_BUS_START_BUSY) &&
+                         (probe_start_result !=
+                          I2C_BUS_START_RESULT_PENDING))
                 {
                     app_enter_oled_state(APP_OLED_BUS_RECOVERY_WAIT,
                                          current_tick_ms,
@@ -726,7 +681,7 @@ static void app_service_oled(uint32_t current_tick_ms)
             break;
 
         case APP_OLED_OFFLINE_PROBING:
-            if (!I2cBus_TakeResult(&s_app.oled_i2c_bus,
+            if (!I2cBus_TakeResult(&s_app.shared_i2c_bus,
                                    &completed_operation, &bus_result))
             {
                 break;
@@ -734,30 +689,11 @@ static void app_service_oled(uint32_t current_tick_ms)
             if ((completed_operation == I2C_BUS_OPERATION_PROBE) &&
                 (bus_result == I2C_BUS_RESULT_SUCCESS))
             {
-                s_app.status.oled_selected_address_7bit =
-                    s_app.oled_probe_address_7bit;
                 s_app.status.oled_fast_attempt_count = 1U;
                 s_app.status.oled_consecutive_nack_count = 0U;
                 if (!app_start_oled_initialization(current_tick_ms))
                 {
                     app_set_oled_error(APP_OLED_ERROR_DISPLAY_INIT);
-                }
-            }
-            else if ((bus_result == I2C_BUS_RESULT_NACK) &&
-                     (s_app.status.oled_selected_address_7bit == 0U) &&
-                     (s_app.oled_probe_address_7bit ==
-                      SSD1306_ADDRESS_LOW_7BIT))
-            {
-                s_app.oled_probe_address_7bit = SSD1306_ADDRESS_HIGH_7BIT;
-                if (I2cBus_StartProbe(&s_app.oled_i2c_bus,
-                                      s_app.oled_probe_address_7bit,
-                                      current_tick_ms,
-                                      APP_OLED_SCAN_PROBE_TIMEOUT_MS) !=
-                    I2C_BUS_START_ACCEPTED)
-                {
-                    app_enter_oled_state(APP_OLED_BUS_RECOVERY_WAIT,
-                                         current_tick_ms,
-                                         "probe could not start");
                 }
             }
             else if (bus_result == I2C_BUS_RESULT_NACK)
@@ -794,8 +730,7 @@ static void app_service_oled(uint32_t current_tick_ms)
 void App_Initialize(TIM_HandleTypeDef *dht11_timer,
                     TIM_HandleTypeDef *servo_timer,
                     UART_HandleTypeDef *pc_serial_uart,
-                    I2C_HandleTypeDef *oled_i2c,
-                    I2C_HandleTypeDef *adxl345_i2c,
+                    I2C_HandleTypeDef *shared_i2c,
                     uint32_t current_tick_ms)
 {
     const DHT11_Config_t dht11_config =
@@ -1019,6 +954,28 @@ void App_Initialize(TIM_HandleTypeDef *dht11_timer,
     PwmOutput_GetStatus(&s_app.servo_pwm, &s_app.status.servo_pwm);
 
     s_app.status.oled_state = APP_OLED_NOT_STARTED;
+    s_app.status.oled_selected_address_7bit =
+        BOARD_OLED_I2C_ADDRESS_7BIT;
+
+    if ((shared_i2c != NULL) &&
+        (shared_i2c->Instance == BOARD_SHARED_I2C_INSTANCE))
+    {
+        const I2cBusRecovery_Config_t shared_recovery_config =
+        {
+            .hal_i2c = shared_i2c,
+            .scl_port = BOARD_SHARED_I2C_SCL_PORT,
+            .scl_pin = BOARD_SHARED_I2C_SCL_PIN,
+            .sda_port = BOARD_SHARED_I2C_SDA_PORT,
+            .sda_pin = BOARD_SHARED_I2C_SDA_PIN
+        };
+        bool recovery_initialized = I2cBusRecovery_Initialize(
+            &s_app.shared_i2c_bus_recovery,
+            &shared_recovery_config);
+
+        s_app.status.shared_i2c_bus_initialized = recovery_initialized &&
+            I2cBus_Initialize(&s_app.shared_i2c_bus, shared_i2c);
+    }
+
     if (!s_app.status.environment_display_initialized ||
         !s_app.status.motion_display_initialized ||
         !s_app.status.output_control_initialized ||
@@ -1027,76 +984,23 @@ void App_Initialize(TIM_HandleTypeDef *dht11_timer,
     {
         app_set_oled_error(APP_OLED_ERROR_DRAW);
     }
-    else if ((oled_i2c == NULL) ||
-        (oled_i2c->Instance != BOARD_OLED_I2C_INSTANCE))
+    else if ((shared_i2c == NULL) ||
+             (shared_i2c->Instance != BOARD_SHARED_I2C_INSTANCE))
     {
         app_set_oled_error(APP_OLED_ERROR_INVALID_I2C);
     }
-    else
+    else if (!s_app.status.shared_i2c_bus_initialized)
     {
-        const I2cBusRecovery_Config_t oled_recovery_config =
-        {
-            .hal_i2c = oled_i2c,
-            .scl_port = BOARD_OLED_I2C_SCL_PORT,
-            .scl_pin = BOARD_OLED_I2C_SCL_PIN,
-            .sda_port = BOARD_OLED_I2C_SDA_PORT,
-            .sda_pin = BOARD_OLED_I2C_SDA_PIN
-        };
-        bool recovery_initialized =
-            I2cBusRecovery_Initialize(&s_app.oled_bus_recovery,
-                                      &oled_recovery_config);
-
-        s_app.status.oled_i2c_bus_initialized = recovery_initialized &&
-            I2cBus_Initialize(&s_app.oled_i2c_bus, oled_i2c);
-
-        if (!s_app.status.oled_i2c_bus_initialized)
-        {
-            app_set_oled_error(APP_OLED_ERROR_BUS_INIT);
-        }
-        else
-        {
-            s_app.status.oled_scan_start_result =
-                I2cBus_StartScan(&s_app.oled_i2c_bus,
-                                 s_app.oled_scan_addresses,
-                                 APP_OLED_SCAN_ADDRESS_CAPACITY,
-                                 current_tick_ms,
-                                 APP_OLED_SCAN_PROBE_TIMEOUT_MS);
-
-            if (s_app.status.oled_scan_start_result ==
-                I2C_BUS_START_ACCEPTED)
-            {
-                s_app.status.oled_state = APP_OLED_SCANNING;
-            }
-            else
-            {
-                app_set_oled_error(APP_OLED_ERROR_SCAN_START);
-            }
-        }
+        app_set_oled_error(APP_OLED_ERROR_BUS_INIT);
+    }
+    else if (!app_start_oled_initialization(current_tick_ms))
+    {
+        app_set_oled_error(APP_OLED_ERROR_DISPLAY_INIT);
     }
 
-    if ((adxl345_i2c != NULL) &&
-        (adxl345_i2c->Instance == BOARD_ADXL345_I2C_INSTANCE))
+    if (s_app.status.shared_i2c_bus_initialized)
     {
-        s_app.status.adxl345_i2c_bus_initialized =
-            I2cBus_Initialize(&s_app.adxl345_i2c_bus, adxl345_i2c);
-    }
-
-    if (s_app.status.adxl345_i2c_bus_initialized)
-    {
-        const Adxl345_Config_t adxl345_config =
-        {
-            .i2c_bus = &s_app.adxl345_i2c_bus,
-            .data_ready_pin = BOARD_ADXL345_INTERRUPT_PIN,
-            .transfer_timeout_ms = APP_ADXL345_TRANSFER_TIMEOUT_MS,
-            .initialize_retry_delay_ms = APP_ADXL345_INIT_RETRY_DELAY_MS,
-            .stale_timeout_ms = APP_ADXL345_STALE_TIMEOUT_MS,
-            .initialize_max_attempts = APP_ADXL345_INIT_MAX_ATTEMPTS
-        };
-
-        s_app.status.adxl345_initialize_result =
-            Adxl345_Initialize(&s_app.adxl345,
-                               &adxl345_config,
-                               current_tick_ms);
+        app_restart_adxl345(current_tick_ms);
     }
     else
     {
@@ -1128,15 +1032,10 @@ void App_Initialize(TIM_HandleTypeDef *dht11_timer,
                          &s_app.status.output_control);
     OutputDisplay_GetStatus(&s_app.output_display,
                             &s_app.status.output_display);
-    if (s_app.status.oled_i2c_bus_initialized)
+    if (s_app.status.shared_i2c_bus_initialized)
     {
-        I2cBus_GetStatus(&s_app.oled_i2c_bus,
-                         &s_app.status.oled_i2c_bus);
-    }
-    if (s_app.status.adxl345_i2c_bus_initialized)
-    {
-        I2cBus_GetStatus(&s_app.adxl345_i2c_bus,
-                         &s_app.status.adxl345_i2c_bus);
+        I2cBus_GetStatus(&s_app.shared_i2c_bus,
+                         &s_app.status.shared_i2c_bus);
     }
     s_app.is_initialized = true;
 }
@@ -1172,16 +1071,16 @@ void App_Service(uint32_t current_tick_ms)
 
     DHT11_Service(current_tick_ms);
 
-    if (s_app.status.oled_i2c_bus_initialized)
+    if (s_app.status.shared_i2c_bus_initialized)
     {
-        I2cBus_Service(&s_app.oled_i2c_bus, current_tick_ms);
-        I2cBus_GetStatus(&s_app.oled_i2c_bus,
-                         &s_app.status.oled_i2c_bus);
+        I2cBus_Service(&s_app.shared_i2c_bus, current_tick_ms);
+        I2cBus_GetStatus(&s_app.shared_i2c_bus,
+                         &s_app.status.shared_i2c_bus);
     }
 
-    if (s_app.status.adxl345_i2c_bus_initialized)
+    if (s_app.status.shared_i2c_bus_initialized &&
+        !app_shared_i2c_recovery_is_active())
     {
-        I2cBus_Service(&s_app.adxl345_i2c_bus, current_tick_ms);
         Adxl345_Service(&s_app.adxl345, current_tick_ms);
         Adxl345_GetStatus(&s_app.adxl345, &s_app.status.adxl345);
         if (Adxl345_TakeNewSample(&s_app.adxl345, &new_adxl345_sample))
@@ -1192,8 +1091,6 @@ void App_Service(uint32_t current_tick_ms)
             motion_sample.sample_tick_ms = new_adxl345_sample.sample_tick_ms;
             new_motion_sample = &motion_sample;
         }
-        I2cBus_GetStatus(&s_app.adxl345_i2c_bus,
-                         &s_app.status.adxl345_i2c_bus);
     }
 
     MotionMonitor_Service(&s_app.motion_monitor,
@@ -1292,11 +1189,11 @@ void App_Service(uint32_t current_tick_ms)
     OutputDisplay_GetStatus(&s_app.output_display,
                             &s_app.status.output_display);
 
-    if (s_app.status.oled_i2c_bus_initialized)
+    if (s_app.status.shared_i2c_bus_initialized)
     {
         app_service_oled(current_tick_ms);
-        I2cBus_GetStatus(&s_app.oled_i2c_bus,
-                         &s_app.status.oled_i2c_bus);
+        I2cBus_GetStatus(&s_app.shared_i2c_bus,
+                         &s_app.status.shared_i2c_bus);
     }
 
     SystemHeartbeat_Service(&s_app.heartbeat, current_tick_ms);
@@ -1332,26 +1229,22 @@ void App_HandleGpioExtiInterrupt(uint16_t gpio_pin)
 
 void App_HandleI2cMasterTransmitCompleteInterrupt(I2C_HandleTypeDef *i2c)
 {
-    I2cBus_HandleMasterTransmitCompleteInterrupt(&s_app.oled_i2c_bus, i2c);
-    I2cBus_HandleMasterTransmitCompleteInterrupt(&s_app.adxl345_i2c_bus, i2c);
+    I2cBus_HandleMasterTransmitCompleteInterrupt(&s_app.shared_i2c_bus, i2c);
 }
 
 void App_HandleI2cMemoryReadCompleteInterrupt(I2C_HandleTypeDef *i2c)
 {
-    I2cBus_HandleMemoryReadCompleteInterrupt(&s_app.oled_i2c_bus, i2c);
-    I2cBus_HandleMemoryReadCompleteInterrupt(&s_app.adxl345_i2c_bus, i2c);
+    I2cBus_HandleMemoryReadCompleteInterrupt(&s_app.shared_i2c_bus, i2c);
 }
 
 void App_HandleI2cErrorInterrupt(I2C_HandleTypeDef *i2c)
 {
-    I2cBus_HandleErrorInterrupt(&s_app.oled_i2c_bus, i2c);
-    I2cBus_HandleErrorInterrupt(&s_app.adxl345_i2c_bus, i2c);
+    I2cBus_HandleErrorInterrupt(&s_app.shared_i2c_bus, i2c);
 }
 
 void App_HandleI2cAbortCompleteInterrupt(I2C_HandleTypeDef *i2c)
 {
-    I2cBus_HandleAbortCompleteInterrupt(&s_app.oled_i2c_bus, i2c);
-    I2cBus_HandleAbortCompleteInterrupt(&s_app.adxl345_i2c_bus, i2c);
+    I2cBus_HandleAbortCompleteInterrupt(&s_app.shared_i2c_bus, i2c);
 }
 
 void App_HandleUartReceiveCompleteInterrupt(UART_HandleTypeDef *uart)

@@ -33,12 +33,11 @@ extern "C" {
 #include "uart_log.h"
 #include "warning_feedback.h"
 
-/** @brief Các bước khởi động và vận hành giao diện OLED. */
+/** @brief Các bước khởi động và vận hành giao diện OLED tại địa chỉ cố định. */
 typedef enum
 {
     APP_OLED_NOT_STARTED = 0, /**< Chưa có I2C handle hợp lệ để bắt đầu. */
-    APP_OLED_SCANNING,        /**< Đang dò các địa chỉ 7-bit trên I2C1. */
-    APP_OLED_INITIALIZING,    /**< Đã chọn địa chỉ và đang khởi tạo SSD1306. */
+    APP_OLED_INITIALIZING,    /**< Đang khởi tạo SSD1306 tại địa chỉ đã xác nhận. */
     APP_OLED_ACTIVE,          /**< OLED sẵn sàng và page được chọn đang hoạt động. */
     APP_OLED_RETRY_WAIT,      /**< Chờ trước khi thử nhanh lại giao tiếp OLED. */
     APP_OLED_BUS_RECOVERY_WAIT, /**< Chờ trước lần bus-clear vật lý kế tiếp. */
@@ -52,12 +51,8 @@ typedef enum
 typedef enum
 {
     APP_OLED_ERROR_NONE = 0,       /**< Chưa có lỗi. */
-    APP_OLED_ERROR_INVALID_I2C,    /**< Handle không phải peripheral dành cho OLED. */
+    APP_OLED_ERROR_INVALID_I2C,    /**< Handle không phải peripheral I2C dùng chung của board. */
     APP_OLED_ERROR_BUS_INIT,       /**< Không thể tạo context I2C bus. */
-    APP_OLED_ERROR_SCAN_START,     /**< Driver từ chối bắt đầu scan. */
-    APP_OLED_ERROR_SCAN_RESULT,    /**< Scan kết thúc với lỗi hoặc sai loại operation. */
-    APP_OLED_ERROR_NOT_FOUND,      /**< Không tìm thấy địa chỉ 0x3C hoặc 0x3D. */
-    APP_OLED_ERROR_AMBIGUOUS,      /**< Cả 0x3C và 0x3D cùng phản hồi nên không tự chọn. */
     APP_OLED_ERROR_DISPLAY_INIT,   /**< SSD1306 từ chối cấu hình hoặc init thất bại. */
     APP_OLED_ERROR_DRAW,           /**< Không thể vẽ giao diện vào framebuffer. */
     APP_OLED_ERROR_REFRESH_REQUEST,/**< Driver từ chối yêu cầu refresh framebuffer. */
@@ -122,25 +117,20 @@ typedef struct
     bool oled_canvas_initialized;                 /**< Canvas đồ họa đã ghép với framebuffer OLED. */
     uint8_t digital_output_initialized_mask;     /**< Bit n bằng 1 khi driver output n khởi tạo được. */
     bool heartbeat_led_initialized;               /**< Driver LED heartbeat đã khởi tạo. */
-    bool ui_ok_button_initialized;                /**< Nút OK/manual warning trên PA4 đã khởi tạo. */
-    bool ui_left_button_initialized;              /**< Nút Left trên PA5 đã khởi tạo. */
-    bool ui_right_button_initialized;             /**< Nút Right trên PA6 đã khởi tạo. */
-    bool ui_up_button_initialized;                /**< Nút Up trên PA7 đã khởi tạo. */
-    bool ui_down_button_initialized;              /**< Nút Down trên PB0 đã khởi tạo. */
+    bool ui_ok_button_initialized;                /**< Nút OK/manual warning trên PB0 đã khởi tạo. */
+    bool ui_left_button_initialized;              /**< Nút Left trên PB3 đã khởi tạo. */
+    bool ui_right_button_initialized;             /**< Nút Right trên PB4 đã khởi tạo. */
+    bool ui_up_button_initialized;                /**< Nút Up trên PB5 đã khởi tạo. */
+    bool ui_down_button_initialized;              /**< Nút Down trên PA15 đã khởi tạo. */
     bool heartbeat_generator_initialized;         /**< Bộ tạo chu kỳ heartbeat đã khởi tạo. */
     bool heartbeat_led_is_active;                 /**< LED heartbeat hiện đang sáng. */
-    bool oled_i2c_bus_initialized;                /**< Context quản lý I2C1 đã khởi tạo. */
-    bool adxl345_i2c_bus_initialized;             /**< Context I2C2 dành cho ADXL345 đã khởi tạo. */
-    I2cBus_StartResult_t oled_scan_start_result;  /**< Kết quả bắt đầu scan I2C1. */
-    I2cBus_Result_t oled_scan_result;             /**< Kết quả cuối cùng của lần scan. */
-    I2cBus_Status_t oled_i2c_bus;                 /**< Snapshot bus, scan và lỗi HAL gần nhất. */
-    I2cBusRecovery_State_t oled_bus_recovery_state; /**< Bước bus-clear I2C1 hiện tại. */
+    bool shared_i2c_bus_initialized;              /**< Context I2C1 dùng chung đã khởi tạo. */
+    I2cBus_Status_t shared_i2c_bus;               /**< Snapshot giao dịch và lỗi của bus dùng chung. */
+    I2cBusRecovery_State_t shared_i2c_bus_recovery_state; /**< Bước bus-clear I2C1 hiện tại. */
     uint8_t oled_fast_attempt_count;              /**< Số lần thử nhanh trong đợt lỗi hiện tại. */
     uint8_t oled_consecutive_nack_count;          /**< Số NACK OLED liên tiếp. */
-    uint8_t oled_bus_recovery_attempt_count;      /**< Số lần bus-clear trong đợt lỗi hiện tại. */
-    I2cBus_Status_t adxl345_i2c_bus;              /**< Snapshot bus I2C2 để quan sát và debug. */
-    uint8_t oled_compatible_address_count;        /**< Số địa chỉ SSD1306 hợp lệ tìm thấy. */
-    uint8_t oled_selected_address_7bit;           /**< Địa chỉ đã chọn; 0 khi chưa chọn được. */
+    uint8_t shared_i2c_bus_recovery_attempt_count; /**< Số lần bus-clear trong đợt lỗi hiện tại. */
+    uint8_t oled_selected_address_7bit;           /**< Địa chỉ SSD1306 7-bit cố định đang sử dụng. */
     Ssd1306_InitializeResult_t oled_initialize_result; /**< Kết quả kiểm tra cấu hình SSD1306. */
     Ssd1306_Status_t oled;                        /**< Snapshot driver SSD1306. */
     App_DisplayPage_t current_display_page;       /**< Page OLED đang được chọn. */
@@ -151,17 +141,15 @@ typedef struct
 /**
  * @brief Khởi tạo toàn bộ module ứng dụng sau các hàm MX_*_Init().
  * @param dht11_timer Handle TIM3 dành cho input capture DHT11.
- * @param servo_timer Handle TIM2 dành cho PWM servo trên PA0.
+ * @param servo_timer Handle TIM1 dành cho PWM servo trên PA8.
  * @param pc_serial_uart Handle UART dành cho liên kết nối tiếp với máy tính.
- * @param oled_i2c Handle I2C được CubeMX khởi tạo cho cổng OLED của board.
- * @param adxl345_i2c Handle I2C được CubeMX khởi tạo cho cổng cảm biến ADXL345.
+ * @param shared_i2c Handle I2C1 dùng chung cho OLED và ADXL345.
  * @param current_tick_ms HAL tick hiện tại.
  */
 void App_Initialize(TIM_HandleTypeDef *dht11_timer,
                     TIM_HandleTypeDef *servo_timer,
                     UART_HandleTypeDef *pc_serial_uart,
-                    I2C_HandleTypeDef *oled_i2c,
-                    I2C_HandleTypeDef *adxl345_i2c,
+                    I2C_HandleTypeDef *shared_i2c,
                     uint32_t current_tick_ms);
 
 /**

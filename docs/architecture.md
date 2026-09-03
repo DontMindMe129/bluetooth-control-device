@@ -44,11 +44,12 @@ Vai trò chính của `main.c`:
 
 ```c
 MX_GPIO_Init();
-MX_I2C2_Init();
-MX_USART2_UART_Init();
 MX_I2C1_Init();
 MX_TIM3_Init();
-MX_TIM2_Init();
+MX_ADC1_Init();      /* tài nguyên dự phòng, App chưa sử dụng */
+MX_SPI1_Init();      /* tài nguyên dự phòng, App chưa sử dụng */
+MX_TIM1_Init();
+MX_USART1_UART_Init();
 
 App_Initialize(...);
 
@@ -65,8 +66,8 @@ while (1)
 `board_config.h` nối tên thiết bị ở tầng ứng dụng với label do CubeMX sinh, ví dụ:
 
 ```c
-#define BOARD_DHT11_DATA_PORT CAPTURE_IO_1_GPIO_Port
-#define BOARD_DHT11_DATA_PIN  CAPTURE_IO_1_Pin
+#define BOARD_DHT11_DATA_PORT CAPTURE_INPUT_1_GPIO_Port
+#define BOARD_DHT11_DATA_PIN  CAPTURE_INPUT_1_Pin
 ```
 
 CubeMX vẫn là nguồn cấu hình chân thực tế. `board_config.h` không biến GPIO thường thành I2C hay timer; nó chỉ giúp code tầng trên không phụ thuộc trực tiếp vào PA/PB cụ thể.
@@ -77,7 +78,7 @@ Driver biết giao thức hoặc peripheral, nhưng không quyết định hành
 
 | Driver | Trách nhiệm |
 |---|---|
-| `i2c_bus` | Gửi, đọc register, scan và probe I2C bằng ngắt |
+| `i2c_bus` | Phân xử một giao dịch tại một thời điểm; gửi, đọc register, scan và probe I2C bằng ngắt |
 | `i2c_bus_recovery` | Bus-clear bằng tối đa 9 xung SCL và tạo STOP |
 | `uart_stream` | RX/TX UART bằng ngắt và ring buffer tĩnh |
 | `dht11` | Start signal, input capture và kiểm tra frame DHT11 |
@@ -111,7 +112,9 @@ App áp dụng policy liên-module:
 - Nút OK có ý nghĩa khác nhau tùy trang OLED.
 - Warning có thể đến từ manual, môi trường hoặc shaking.
 - Warning tạm chiếm năm output nhưng trạng thái người dùng vẫn được giữ.
-- Lỗi OLED không được làm DHT11, ADXL345, UART và heartbeat ngừng chạy.
+- OLED và ADXL345 chia sẻ một context I2C1; driver không được tự tạo giao dịch khi bus đang bận.
+- Khi bus-clear I2C1 chạy, App tạm dừng ADXL345 rồi khởi tạo lại state machine cảm biến sau khi phục hồi.
+- Lỗi I2C không được làm DHT11, UART, nút và heartbeat ngừng chạy.
 
 ## Header và source khác nhau thế nào?
 

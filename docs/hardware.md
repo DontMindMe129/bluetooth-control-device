@@ -12,38 +12,40 @@
 
 | Chân | Label CubeMX | Vai trò hiện tại | Cấu hình chính |
 |---|---|---|---|
-| PC13 | `BOARD_LED` | Heartbeat | Output, active-low |
-| PA0 | `PWM_OUTPUT_1` | PWM/servo | TIM2 CH1 |
-| PA1 | `INTERRUPT_INPUT_6` | ADXL345 INT1 | EXTI1, no-pull |
-| PA2 | `UART_PORT_1_TX` | PC UART TX | USART2 |
-| PA3 | `UART_PORT_1_RX` | PC UART RX | USART2 |
-| PA4 | `INTERRUPT_INPUT_1` | OK | EXTI falling, pull-up |
-| PA5 | `INTERRUPT_INPUT_2` | Left | EXTI falling, pull-up |
-| PA6 | `INTERRUPT_INPUT_3` | Right | EXTI falling, pull-up |
-| PA7 | `INTERRUPT_INPUT_4` | Up | EXTI falling, pull-up |
-| PB0 | `INTERRUPT_INPUT_5` | Down | EXTI falling, pull-up |
-| PB1 | `CAPTURE_IO_1` | DHT11 DATA | TIM3 CH4 falling capture |
-| PB6 | `I2C_PORT_1_SCL` | OLED SCL | I2C1, 100 kHz |
-| PB7 | `I2C_PORT_1_SDA` | OLED SDA | I2C1, 100 kHz |
-| PB10 | `I2C_PORT_2_SCL` | ADXL345 SCL | I2C2, 100 kHz |
-| PB11 | `I2C_PORT_2_SDA` | ADXL345 SDA | I2C2, 100 kHz |
-| PB12–PB15 | `DIGITAL_OUTPUT_1..4` | Output 1–4 | GPIO active-high |
-| PA8 | `DIGITAL_OUTPUT_5` | Output 5 | GPIO active-high |
+| PC13 | `BOARD_STATUS_LED` | Heartbeat | Output, active-low |
+| PA0–PA3 | `ANALOG_INPUT_1..4` | Dự phòng ADC | ADC1; App chưa sử dụng |
+| PA4 | `SPI_PORT_1_CS_1` | Dự phòng chip-select 1 | GPIO output; App chưa sử dụng |
+| PA5/PA6/PA7 | `SPI_PORT_1_SCK/MISO/MOSI` | Dự phòng SPI | SPI1; App chưa sử dụng |
+| PA8 | `PWM_OUTPUT_1` | PWM/servo | TIM1 CH1 |
+| PA9 | `UART_PORT_1_TX` | PC UART TX | USART1 |
+| PA10 | `UART_PORT_1_RX` | PC UART RX | USART1 |
+| PA15 | `DIGITAL_INPUT_5` | Down | EXTI falling, pull-up |
+| PB0 | `DIGITAL_INPUT_1` | OK | EXTI falling, pull-up |
+| PB1 | `CAPTURE_INPUT_1` | DHT11 DATA | TIM3 CH4 falling capture, filter 4 |
+| PB3 | `DIGITAL_INPUT_2` | Left | EXTI falling, pull-up |
+| PB4 | `DIGITAL_INPUT_3` | Right | EXTI falling, pull-up |
+| PB5 | `DIGITAL_INPUT_4` | Up | EXTI falling, pull-up |
+| PB6 | `I2C_PORT_1_SCL` | I2C dùng chung | I2C1, 100 kHz |
+| PB7 | `I2C_PORT_1_SDA` | I2C dùng chung | I2C1, 100 kHz |
+| PB8–PB12 | `DIGITAL_OUTPUT_1..5` | Output 1–5 | GPIO active-high |
+| PB13 | `INTERRUPT_INPUT_1` | ADXL345 INT1 | EXTI13 rising, no-pull |
+| PB14/PB15 | `SPI_PORT_1_CS_2/3` | Dự phòng chip-select 2–3 | GPIO output; App chưa sử dụng |
 | PA13 | — | SWDIO | System debug |
 | PA14 | — | SWCLK | System debug |
 
 ## Timer
 
-TIM2 và TIM3 đều dùng prescaler 7 với clock timer 8 MHz:
+TIM1 và TIM3 đều dùng prescaler 7 với clock timer 8 MHz:
 
 ```text
 timer tick = 8 MHz / (7 + 1) = 1 MHz
 1 counter tick = 1 µs
-ARR = 19999 → chu kỳ tràn = 20 ms
+TIM1 ARR = 19999 → chu kỳ PWM = 20 ms
+TIM3 ARR = 65535 → chu kỳ tràn capture = 65,536 ms
 ```
 
-- TIM2 CH1 tạo PWM 20 ms trên PA0.
-- TIM3 CH4 đo pulse DHT11 trên PB1. Phép trừ capture có xử lý wrap nên ARR 19999 vẫn đủ cho các pulse DHT11 cỡ microsecond.
+- TIM1 CH1 tạo PWM 20 ms trên PA8.
+- TIM3 CH4 đo pulse DHT11 trên PB1. Phép trừ capture có xử lý wrap theo ARR 65535.
 
 ## Nút và LED output
 
@@ -59,7 +61,9 @@ Không nối LED trực tiếp mà thiếu điện trở hạn dòng.
 
 ## I2C và pull-up
 
-I2C là bus open-drain nên SCL/SDA cần điện trở pull-up. Nhiều breakout OLED/ADXL345 đã có sẵn, nhưng cần kiểm tra schematic hoặc module thực tế thay vì mặc định.
+I2C là bus open-drain nên SCL/SDA cần điện trở pull-up. OLED và ADXL345 dùng chung PB6/PB7; địa chỉ 7-bit đã xác nhận lần lượt là `0x3C` và `0x53`. App không quét toàn bộ bus khi khởi động, nhưng API scan tổng quát vẫn được giữ trong `i2c_bus` để dùng sau.
+
+Nhiều breakout OLED/ADXL345 đã có sẵn pull-up, nhưng cần kiểm tra schematic hoặc module thực tế thay vì mặc định. Các thiết bị trên bus phải dùng chung GND và mức logic phù hợp.
 
 DHT11 module trong project đã có pull-up trên DATA theo xác nhận phần cứng hiện tại.
 

@@ -69,11 +69,11 @@ static Adxl345_Error_t adxl345_error_from_bus_result(I2cBus_Result_t result)
 }
 
 /** @brief Bắt đầu đọc một hoặc nhiều thanh ghi 8-bit. */
-static bool adxl345_start_read(Adxl345_t *sensor,
-                               uint8_t register_address,
-                               uint8_t *data,
-                               uint16_t length,
-                               uint32_t current_tick_ms)
+static I2cBus_StartResult_t adxl345_start_read(Adxl345_t *sensor,
+                                               uint8_t register_address,
+                                               uint8_t *data,
+                                               uint16_t length,
+                                               uint32_t current_tick_ms)
 {
     I2cBus_StartResult_t start_result = I2cBus_StartMemoryRead(
         sensor->config.i2c_bus,
@@ -87,7 +87,7 @@ static bool adxl345_start_read(Adxl345_t *sensor,
 
     sensor->status.transaction_is_pending =
         (start_result == I2C_BUS_START_ACCEPTED);
-    return sensor->status.transaction_is_pending;
+    return start_result;
 }
 
 /** @brief Bắt đầu ghi một thanh ghi bằng buffer [địa chỉ, giá trị]. */
@@ -147,36 +147,30 @@ static void adxl345_fail_initialization(Adxl345_t *sensor,
     }
 }
 
-/** @brief Bắt đầu probe một trong hai địa chỉ hợp lệ của ADXL345. */
-static bool adxl345_start_probe(Adxl345_t *sensor,
-                                uint8_t address_7bit,
-                                Adxl345_State_t state,
-                                uint32_t current_tick_ms)
+/** @brief Bắt đầu một lần khởi tạo đầy đủ tại địa chỉ 7-bit đã cấu hình. */
+static I2cBus_StartResult_t adxl345_start_initialization_attempt(
+    Adxl345_t *sensor,
+    uint32_t current_tick_ms)
 {
-    sensor->status.selected_address_7bit = address_7bit;
-    sensor->status.state = state;
-    return adxl345_start_read(sensor,
-                              ADXL345_REGISTER_DEVID,
-                              &sensor->status.device_id,
-                              1U,
-                              current_tick_ms);
-}
+    I2cBus_StartResult_t start_result;
 
-/** @brief Bắt đầu một lần khởi tạo đầy đủ tại địa chỉ ưu tiên 0x53. */
-static bool adxl345_start_initialization_attempt(Adxl345_t *sensor,
-                                                 uint32_t current_tick_ms)
-{
-    if (sensor->status.initialize_attempt_count < UINT8_MAX)
+    sensor->status.device_id = 0U;
+    sensor->status.selected_address_7bit = sensor->config.address_7bit;
+    sensor->status.state = ADXL345_STATE_VERIFYING_DEVICE;
+    start_result = adxl345_start_read(sensor,
+                                      ADXL345_REGISTER_DEVID,
+                                      &sensor->status.device_id,
+                                      1U,
+                                      current_tick_ms);
+
+    /* BUSY/RESULT_PENDING chỉ là đang nhường bus dùng chung, chưa phải một attempt. */
+    if ((start_result != I2C_BUS_START_BUSY) &&
+        (start_result != I2C_BUS_START_RESULT_PENDING) &&
+        (sensor->status.initialize_attempt_count < UINT8_MAX))
     {
         sensor->status.initialize_attempt_count++;
     }
-
-    sensor->probe_saw_invalid_device = false;
-    sensor->status.device_id = 0U;
-    return adxl345_start_probe(sensor,
-                               ADXL345_PRIMARY_ADDRESS_7BIT,
-                               ADXL345_STATE_PROBING_PRIMARY,
-                               current_tick_ms);
+    return start_result;
 }
 
 /** @brief Tiếp tục chuỗi cấu hình sau khi DEVID hợp lệ. */
@@ -190,17 +184,12 @@ static bool adxl345_start_rate_configuration(Adxl345_t *sensor,
                                          current_tick_ms);
 }
 
-/** @brief Xử lý probe hiện tại và chuyển địa chỉ hoặc bắt đầu cấu hình. */
-static void adxl345_handle_probe_result(Adxl345_t *sensor,
-                                        I2cBus_Result_t result,
-                                        uint32_t current_tick_ms)
+/** @brief Xác minh DEVID tại địa chỉ cố định rồi bắt đầu chuỗi cấu hình. */
+static void adxl345_handle_device_verification_result(
+    Adxl345_t *sensor,
+    I2cBus_Result_t result,
+    uint32_t current_tick_ms)
 {
-    I2cBus_Status_t bus_status;
-    bool current_is_primary =
-        (sensor->status.state == ADXL345_STATE_PROBING_PRIMARY);
-
-    I2cBus_GetStatus(sensor->config.i2c_bus, &bus_status);
-
     if (result == I2C_BUS_RESULT_SUCCESS)
     {
         if (sensor->status.device_id == ADXL345_EXPECTED_DEVICE_ID)
@@ -213,38 +202,17 @@ static void adxl345_handle_probe_result(Adxl345_t *sensor,
             }
             return;
         }
-        sensor->probe_saw_invalid_device = true;
-    }
-    else if ((result != I2C_BUS_RESULT_NACK) &&
-             ((result != I2C_BUS_RESULT_HAL_ERROR) ||
-              (bus_status.last_hal_error != HAL_I2C_ERROR_AF)))
-    {
         adxl345_fail_initialization(sensor,
-                                    adxl345_error_from_bus_result(result),
+                                    ADXL345_ERROR_INVALID_DEVICE_ID,
                                     current_tick_ms);
         return;
     }
 
-    if (current_is_primary)
-    {
-        if (!adxl345_start_probe(sensor,
-                                 ADXL345_ALTERNATE_ADDRESS_7BIT,
-                                 ADXL345_STATE_PROBING_ALTERNATE,
-                                 current_tick_ms))
-        {
-            adxl345_fail_initialization(sensor,
-                                        ADXL345_ERROR_I2C_START,
-                                        current_tick_ms);
-        }
-        return;
-    }
-
-    adxl345_fail_initialization(
-        sensor,
-        sensor->probe_saw_invalid_device
-            ? ADXL345_ERROR_INVALID_DEVICE_ID
-            : ADXL345_ERROR_DEVICE_NOT_FOUND,
-        current_tick_ms);
+    adxl345_fail_initialization(sensor,
+                                (result == I2C_BUS_RESULT_NACK)
+                                    ? ADXL345_ERROR_DEVICE_NOT_FOUND
+                                    : adxl345_error_from_bus_result(result),
+                                current_tick_ms);
 }
 
 /** @brief Chuyển sang bước cấu hình kế tiếp sau một register write thành công. */
@@ -353,10 +321,14 @@ Adxl345_InitializeResult_t Adxl345_Initialize(
     const Adxl345_Config_t *config,
     uint32_t current_tick_ms)
 {
+    I2cBus_StartResult_t start_result;
+
     if ((sensor == NULL) ||
         (config == NULL) ||
         (config->i2c_bus == NULL) ||
         !config->i2c_bus->status.is_initialized ||
+        ((config->address_7bit != ADXL345_PRIMARY_ADDRESS_7BIT) &&
+         (config->address_7bit != ADXL345_ALTERNATE_ADDRESS_7BIT)) ||
         !adxl345_is_single_pin(config->data_ready_pin) ||
         (config->transfer_timeout_ms == 0U) ||
         (config->initialize_retry_delay_ms == 0U) ||
@@ -376,11 +348,22 @@ Adxl345_InitializeResult_t Adxl345_Initialize(
     sensor->config = *config;
     sensor->status.is_initialized = true;
 
-    if (!adxl345_start_initialization_attempt(sensor, current_tick_ms))
+    start_result = adxl345_start_initialization_attempt(sensor,
+                                                        current_tick_ms);
+    if (start_result != I2C_BUS_START_ACCEPTED)
     {
-        adxl345_fail_initialization(sensor,
-                                    ADXL345_ERROR_I2C_START,
-                                    current_tick_ms);
+        if ((start_result == I2C_BUS_START_BUSY) ||
+            (start_result == I2C_BUS_START_RESULT_PENDING))
+        {
+            sensor->status.state = ADXL345_STATE_RETRY_WAIT;
+            sensor->state_start_tick_ms = current_tick_ms;
+        }
+        else
+        {
+            adxl345_fail_initialization(sensor,
+                                        ADXL345_ERROR_I2C_START,
+                                        current_tick_ms);
+        }
     }
 
     return ADXL345_INITIALIZE_ACCEPTED;
@@ -407,8 +390,7 @@ void Adxl345_Service(Adxl345_t *sensor, uint32_t current_tick_ms)
 
         sensor->status.transaction_is_pending = false;
 
-        if ((sensor->status.state == ADXL345_STATE_PROBING_PRIMARY) ||
-            (sensor->status.state == ADXL345_STATE_PROBING_ALTERNATE))
+        if (sensor->status.state == ADXL345_STATE_VERIFYING_DEVICE)
         {
             if (completed_operation != I2C_BUS_OPERATION_MEMORY_READ)
             {
@@ -418,9 +400,9 @@ void Adxl345_Service(Adxl345_t *sensor, uint32_t current_tick_ms)
             }
             else
             {
-                adxl345_handle_probe_result(sensor,
-                                            bus_result,
-                                            current_tick_ms);
+                adxl345_handle_device_verification_result(sensor,
+                                                          bus_result,
+                                                          current_tick_ms);
             }
             return;
         }
@@ -472,7 +454,17 @@ void Adxl345_Service(Adxl345_t *sensor, uint32_t current_tick_ms)
                                  sensor->state_start_tick_ms,
                                  sensor->config.initialize_retry_delay_ms))
     {
-        if (!adxl345_start_initialization_attempt(sensor, current_tick_ms))
+        I2cBus_StartResult_t start_result =
+            adxl345_start_initialization_attempt(sensor, current_tick_ms);
+
+        if ((start_result == I2C_BUS_START_BUSY) ||
+            (start_result == I2C_BUS_START_RESULT_PENDING))
+        {
+            /* Thiết bị khác đang dùng bus: chờ đủ delay rồi thử giành bus lại. */
+            sensor->status.state = ADXL345_STATE_RETRY_WAIT;
+            sensor->state_start_tick_ms = current_tick_ms;
+        }
+        else if (start_result != I2C_BUS_START_ACCEPTED)
         {
             adxl345_fail_initialization(sensor,
                                         ADXL345_ERROR_I2C_START,
@@ -484,19 +476,31 @@ void Adxl345_Service(Adxl345_t *sensor, uint32_t current_tick_ms)
     if ((sensor->status.state == ADXL345_STATE_READY) &&
         adxl345_take_data_ready(sensor))
     {
+        I2cBus_StartResult_t start_result;
+
         sensor->status.state = ADXL345_STATE_READING_SAMPLE;
-        if (!adxl345_start_read(sensor,
-                                ADXL345_REGISTER_DATAX0,
-                                sensor->transfer_buffer,
-                                ADXL345_AXIS_DATA_LENGTH,
-                                current_tick_ms))
+        start_result = adxl345_start_read(sensor,
+                                          ADXL345_REGISTER_DATAX0,
+                                          sensor->transfer_buffer,
+                                          ADXL345_AXIS_DATA_LENGTH,
+                                          current_tick_ms);
+        if (start_result != I2C_BUS_START_ACCEPTED)
         {
             sensor->status.state = ADXL345_STATE_READY;
-            sensor->status.has_error = true;
-            sensor->status.last_error = ADXL345_ERROR_I2C_START;
-            if (sensor->status.failed_sample_count < UINT32_MAX)
+            if ((start_result == I2C_BUS_START_BUSY) ||
+                (start_result == I2C_BUS_START_RESULT_PENDING))
             {
-                sensor->status.failed_sample_count++;
+                /* OLED đang sở hữu bus: giữ yêu cầu để thử lại ở vòng main sau. */
+                sensor->data_ready_pending = true;
+            }
+            else
+            {
+                sensor->status.has_error = true;
+                sensor->status.last_error = ADXL345_ERROR_I2C_START;
+                if (sensor->status.failed_sample_count < UINT32_MAX)
+                {
+                    sensor->status.failed_sample_count++;
+                }
             }
         }
     }

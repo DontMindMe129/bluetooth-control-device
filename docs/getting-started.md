@@ -91,7 +91,8 @@ s_app.status.motion_monitor
 s_app.status.warning_feedback
 s_app.status.output_control
 s_app.status.oled_state
-s_app.status.oled_i2c_bus
+s_app.status.shared_i2c_bus
+s_app.status.shared_i2c_bus_recovery_state
 s_app.status.pc_serial
 ```
 

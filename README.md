@@ -7,14 +7,14 @@ Firmware học tập cho **STM32F103C8T6 Blue Pill**, xây dựng bằng STM32Cu
 ## Project làm được gì?
 
 - Đọc DHT11 bằng TIM3 input capture và ngắt cạnh xuống.
-- Đọc ADXL345 qua I2C2, theo dõi tư thế và phát hiện rung/lắc.
-- Điều khiển OLED SSD1306 128×64 qua I2C1 bằng framebuffer 1024 byte.
+- Đọc ADXL345 tại địa chỉ `0x53` qua I2C1, theo dõi tư thế và phát hiện rung/lắc.
+- Điều khiển OLED SSD1306 128×64 tại địa chỉ `0x3C` trên cùng I2C1 bằng framebuffer 1024 byte.
 - Hiển thị ba trang: Environment, Motion và Outputs.
 - Nhận năm nút Up, Down, Left, Right và OK bằng EXTI có debounce.
 - Điều khiển năm digital output và phát pattern cảnh báo.
-- Tạo PWM bằng TIM2 channel 1.
-- Giao tiếp UART2 hai chiều bằng ngắt, ring buffer và command console.
-- Tự retry, probe lại và bus-clear khi OLED/I2C1 gặp lỗi.
+- Tạo PWM bằng TIM1 channel 1.
+- Giao tiếp USART1 hai chiều bằng ngắt, ring buffer và command console.
+- Tự retry, probe lại địa chỉ OLED cố định và bus-clear khi I2C1 gặp lỗi.
 - Nháy LED PC13 làm heartbeat để nhận biết firmware còn chạy.
 
 ## Bức tranh tổng thể
@@ -22,9 +22,9 @@ Firmware học tập cho **STM32F103C8T6 Blue Pill**, xây dựng bằng STM32Cu
 ```mermaid
 flowchart LR
     DHT[DHT11] -->|TIM3 capture| DRV[Drivers]
-    ADXL[ADXL345] -->|I2C2 + INT1| DRV
+    ADXL[ADXL345] -->|I2C1 + INT1| DRV
     BTN[5 buttons] -->|EXTI| DRV
-    UART[PC / Bluetooth sau này] <-->|USART2| DRV
+    UART[PC / Bluetooth sau này] <-->|USART1| DRV
     DRV --> SVC[Services<br/>monitor · graphics · display · feedback]
     SVC --> APP[App<br/>điều phối superloop]
     APP --> OLED[OLED SSD1306]
@@ -51,13 +51,13 @@ Các driver không chờ phần cứng hoàn thành trong vòng lặp. Giao dị
 
 | Chức năng | Chân / peripheral |
 |---|---|
-| UART với máy tính | USART2: PA2 TX, PA3 RX, 9600-8-N-1 |
-| OLED SSD1306 | I2C1: PB6 SCL, PB7 SDA, 100 kHz |
-| ADXL345 | I2C2: PB10 SCL, PB11 SDA, PA1 INT1 |
+| UART với máy tính | USART1: PA9 TX, PA10 RX, 9600-8-N-1 |
+| OLED SSD1306 | I2C1: PB6 SCL, PB7 SDA, địa chỉ 7-bit `0x3C` |
+| ADXL345 | Dùng chung I2C1, địa chỉ 7-bit `0x53`, PB13 INT1 |
 | DHT11 | PB1, TIM3 channel 4 input capture |
-| PWM/servo | PA0, TIM2 channel 1 |
-| Nút OK/Left/Right/Up/Down | PA4/PA5/PA6/PA7/PB0 |
-| Digital output 1–5 | PB12/PB13/PB14/PB15/PA8 |
+| PWM/servo | PA8, TIM1 channel 1 |
+| Nút OK/Left/Right/Up/Down | PB0/PB3/PB4/PB5/PA15 |
+| Digital output 1–5 | PB8/PB9/PB10/PB11/PB12 |
 | Heartbeat LED | PC13, active-low |
 | Debug | SWD: PA13 SWDIO, PA14 SWCLK |
 
