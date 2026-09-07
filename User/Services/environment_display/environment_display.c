@@ -251,7 +251,8 @@ static bool environment_display_update_warning_blink(
 static bool environment_display_content_is_equal(
     const EnvironmentDisplay_t *display,
     const EnvironmentMonitor_Status_t *environment,
-    const EnvironmentFeedback_Status_t *feedback)
+    const EnvironmentFeedback_Status_t *feedback,
+    bool monitoring_is_active)
 {
     const DHT11_Data_t *old_data = &display->desired_environment.latest_data;
     const DHT11_Data_t *new_data = &environment->latest_data;
@@ -264,6 +265,7 @@ static bool environment_display_content_is_equal(
         (display->desired_environment.data_state == environment->data_state) &&
         (display->desired_environment.condition == environment->condition) &&
         (display->desired_feedback.warning_active == feedback->warning_active) &&
+        (display->status.monitoring_is_active == monitoring_is_active) &&
         (display->status.active_warning ==
          environment_display_select_warning(environment, feedback));
 }
@@ -305,7 +307,9 @@ static bool environment_display_draw_header(
         !MonoGraphics_DrawText(canvas,
                                1U,
                                1U,
-                               "ENVIRONMENT",
+                               display->status.monitoring_is_active
+                                   ? "ENV ON"
+                                   : "ENV OFF",
                                &g_mono_font_5x7,
                                MONO_GRAPHICS_PIXEL_OFF,
                                MONO_GRAPHICS_PIXEL_ON,
@@ -424,7 +428,8 @@ bool EnvironmentDisplay_Initialize(EnvironmentDisplay_t *display)
 void EnvironmentDisplay_Update(
     EnvironmentDisplay_t *display,
     const EnvironmentMonitor_Status_t *environment,
-    const EnvironmentFeedback_Status_t *feedback)
+    const EnvironmentFeedback_Status_t *feedback,
+    bool monitoring_is_active)
 {
     bool content_changed;
     EnvironmentDisplay_Warning_t new_warning;
@@ -442,10 +447,12 @@ void EnvironmentDisplay_Update(
         !display->status.has_desired_content ||
         !environment_display_content_is_equal(display,
                                               environment,
-                                              feedback);
+                                              feedback,
+                                              monitoring_is_active);
 
     display->desired_environment = *environment;
     display->desired_feedback = *feedback;
+    display->status.monitoring_is_active = monitoring_is_active;
     display->status.has_desired_content = true;
 
     if (display->status.active_warning != new_warning)

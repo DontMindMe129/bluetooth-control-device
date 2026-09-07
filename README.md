@@ -9,7 +9,7 @@ Firmware học tập cho **STM32F103C8T6 Blue Pill**, xây dựng bằng STM32Cu
 - Đọc DHT11 bằng TIM3 input capture và ngắt cạnh xuống.
 - Đọc ADXL345 tại địa chỉ `0x53` qua I2C1, theo dõi tư thế và phát hiện rung/lắc.
 - Điều khiển OLED SSD1306 128×64 tại địa chỉ `0x3C` trên cùng I2C1 bằng framebuffer 1024 byte.
-- Hiển thị ba trang: Environment, Motion và Outputs.
+- Hiển thị năm trang: Environment, Environment History, Motion, Warning History và Outputs.
 - Nhận năm nút Up, Down, Left, Right và OK bằng EXTI có debounce.
 - Điều khiển năm digital output và phát pattern cảnh báo.
 - Tạo PWM bằng TIM1 channel 1.
@@ -110,15 +110,19 @@ Hướng dẫn đầy đủ nằm tại [docs/getting-started.md](docs/getting-s
 ## Điều khiển
 
 - Left/Right: đổi trang OLED.
+- Up/Down tại hai trang History: cuộn record đang chọn.
+- OK tại hai trang History: chuyển giữa danh sách và chi tiết record.
 - Up/Down: đổi output đang chọn tại trang Outputs.
 - OK tại trang Outputs: bật/tắt output được chọn.
 - OK tại trang Environment hoặc Motion: kích hoạt manual warning.
+- Giữ OK: bật/tắt phiên giám sát ở bất kỳ trang nào.
 
 Command UART hiện có:
 
 ```text
 help
 echo [arg ...]
+monitor <start|stop|status>
 ```
 
 Mỗi command kết thúc bằng `\r`, `\n` hoặc `\r\n`.

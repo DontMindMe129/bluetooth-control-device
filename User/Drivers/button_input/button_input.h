@@ -70,6 +70,12 @@ void ButtonInput_Service(ButtonInput_t *button, uint32_t current_tick_ms);
  */
 bool ButtonInput_TakePressedEvent(ButtonInput_t *button);
 
+/**
+ * @brief Đọc mức vật lý hiện tại và quy đổi thành đang nhấn/đang nhả.
+ * @note Giá trị tức thời này chưa debounce; phù hợp làm đầu vào cho ButtonGesture.
+ */
+bool ButtonInput_IsPressed(const ButtonInput_t *button);
+
 #ifdef __cplusplus
 }
 #endif

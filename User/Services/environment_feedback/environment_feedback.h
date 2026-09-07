@@ -37,10 +37,18 @@ typedef struct
     bool warning_active;                    /**< Manual hoặc automatic warning đang hoạt động. */
 } EnvironmentFeedback_Status_t;
 
+/** @brief Context tĩnh do caller sở hữu cho policy phản hồi môi trường. */
+typedef struct
+{
+    EnvironmentFeedback_Status_t status; /**< Trạng thái hiện tại của service. */
+} EnvironmentFeedback_t;
+
 /**
  * @brief Khởi tạo policy phản hồi ở trạng thái tắt.
+ * @param feedback Context do caller cấp phát tĩnh.
+ * @return true khi context hợp lệ và đã được khởi tạo.
  */
-void EnvironmentFeedback_Initialize(void);
+bool EnvironmentFeedback_Initialize(EnvironmentFeedback_t *feedback);
 
 /**
  * @brief Cập nhật manual override và kết luận cảnh báo môi trường hiện tại.
@@ -49,20 +57,26 @@ void EnvironmentFeedback_Initialize(void);
  * kiện manual mới, sự kiện mới được giữ lại đến mẫu hợp lệ tiếp theo. Khi dữ liệu
  * không fresh, warning chỉ còn active nếu manual warning đang được giữ.
  *
+ * @param feedback Context đã khởi tạo.
  * @param environment_status Snapshot mới nhất từ environment monitor.
  * @param has_new_environment_sample true khi vừa nhận một mẫu cảm biến hợp lệ mới.
  * @param manual_warning_requested true khi nút manual vừa được xác nhận qua debounce.
+ * @param automatic_warning_enabled true khi phiên giám sát cho phép cảnh báo tự động.
  */
 void EnvironmentFeedback_Service(
+    EnvironmentFeedback_t *feedback,
     const EnvironmentMonitor_Status_t *environment_status,
     bool has_new_environment_sample,
-    bool manual_warning_requested);
+    bool manual_warning_requested,
+    bool automatic_warning_enabled);
 
 /**
  * @brief Sao chép snapshot hiện tại cho application.
+ * @param feedback Context nguồn.
  * @param output_status Vùng nhớ nhận snapshot; NULL sẽ được bỏ qua.
  */
 void EnvironmentFeedback_GetStatus(
+    const EnvironmentFeedback_t *feedback,
     EnvironmentFeedback_Status_t *output_status);
 
 #ifdef __cplusplus

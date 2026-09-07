@@ -99,6 +99,19 @@ typedef struct
 } DHT11_Data_t;
 
 /**
+ * @brief Kết quả một lần đo đã hoàn tất trong main context.
+ *
+ * Mỗi giao dịch tạo đúng một kết quả, kể cả khi không nhận được dữ liệu hợp lệ.
+ * DHT11_ERROR_NONE biểu thị lần đo thành công; các giá trị khác cho biết nguyên
+ * nhân giao dịch thất bại.
+ */
+typedef struct
+{
+    uint32_t completed_tick_ms; /**< HAL tick khi driver chốt kết quả giao dịch. */
+    DHT11_Error_t error;        /**< Kết quả giao dịch; NONE nghĩa là thành công. */
+} DHT11_MeasurementResult_t;
+
+/**
  * @brief Thông tin trạng thái và chẩn đoán của module DHT11.
  */
 typedef struct
@@ -109,6 +122,7 @@ typedef struct
     uint32_t last_success_tick_ms;        /**< HAL tick tại lần cập nhật dữ liệu hợp lệ gần nhất. */
     bool has_latest_valid_data;  /**< true khi module đang lưu một khung đã vượt qua checksum. */
     bool has_unread_data;        /**< true khi khung mới nhất chưa được lấy bằng DHT11_TakeNewData(). */
+    bool has_unread_measurement_result; /**< true khi một kết quả giao dịch chưa được lấy. */
 } DHT11_Status_t;
 
 /* API điều khiển module từ main context. */
@@ -182,6 +196,21 @@ bool DHT11_GetLatestData(DHT11_Data_t *output_data);
  * @return false nếu output_data là NULL hoặc không có dữ liệu mới.
  */
 bool DHT11_TakeNewData(DHT11_Data_t *output_data);
+
+/**
+ * @brief Lấy đúng một lần kết quả của giao dịch DHT11 vừa hoàn tất.
+ *
+ * API này độc lập với DHT11_TakeNewData(): một giao dịch lỗi vẫn tạo kết quả
+ * nhưng không tạo dữ liệu mới. Khi giao dịch thành công, error bằng
+ * DHT11_ERROR_NONE và dữ liệu tương ứng có thể lấy bằng DHT11_TakeNewData().
+ *
+ * @param output_result Vùng nhớ nhận thời điểm hoàn tất và lỗi giao dịch.
+ *
+ * @return true nếu đã sao chép một kết quả mới và đánh dấu kết quả đã được lấy.
+ * @return false nếu tham số NULL hoặc chưa có giao dịch mới hoàn tất.
+ */
+bool DHT11_TakeMeasurementResult(
+    DHT11_MeasurementResult_t *output_result);
 
 /**
  * @brief Lấy snapshot trạng thái hiện tại của module.

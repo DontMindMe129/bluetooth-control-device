@@ -49,6 +49,8 @@ typedef struct
     uint16_t consecutive_error_count;
     bool has_latest_valid_data;
     bool has_unread_data;
+    DHT11_MeasurementResult_t latest_measurement_result;
+    bool has_unread_measurement_result;
 } DHT11_InternalContext_t;
 
 static DHT11_InternalContext_t s_dht11_context;
@@ -64,7 +66,10 @@ static void dht11_configure_data_pin_as_open_drain_output(void);
 static void dht11_clear_capture_flags(void);
 static void dht11_disable_capture_interrupt(void);
 static void dht11_increment_error_count(void);
-static void dht11_finish_transaction_with_error(DHT11_Error_t error);
+static void dht11_publish_measurement_result(uint32_t completed_tick_ms,
+                                             DHT11_Error_t error);
+static void dht11_finish_transaction_with_error(DHT11_Error_t error,
+                                                uint32_t current_tick_ms);
 static void dht11_set_error_from_interrupt(DHT11_Error_t error);
 static uint32_t dht11_get_timer_input_clock_hz(void);
 static bool dht11_configure_timing_conversion(void);
@@ -238,10 +243,21 @@ static void dht11_increment_error_count(void)
     }
 }
 
+/** @brief Xuất bản một kết quả giao dịch để main lấy đúng một lần. */
+static void dht11_publish_measurement_result(uint32_t completed_tick_ms,
+                                             DHT11_Error_t error)
+{
+    s_dht11_context.latest_measurement_result.completed_tick_ms =
+        completed_tick_ms;
+    s_dht11_context.latest_measurement_result.error = error;
+    s_dht11_context.has_unread_measurement_result = true;
+}
+
 /**
  * @brief Kết thúc một giao dịch lỗi trong main context và trả module về chờ.
  */
-static void dht11_finish_transaction_with_error(DHT11_Error_t error)
+static void dht11_finish_transaction_with_error(DHT11_Error_t error,
+                                                uint32_t current_tick_ms)
 {
     uint32_t previous_primask = dht11_enter_critical();
 
@@ -254,6 +270,7 @@ static void dht11_finish_transaction_with_error(DHT11_Error_t error)
 
     dht11_configure_data_pin_as_input();
     dht11_increment_error_count();
+    dht11_publish_measurement_result(current_tick_ms, error);
 }
 
 /**
@@ -368,7 +385,8 @@ static void dht11_begin_transaction(uint32_t current_tick_ms)
     if (HAL_GPIO_ReadPin(s_dht11_context.config.data_port,
                         s_dht11_context.config.data_pin) != GPIO_PIN_SET)
     {
-        dht11_finish_transaction_with_error(DHT11_ERROR_BUS_STUCK_LOW);
+        dht11_finish_transaction_with_error(DHT11_ERROR_BUS_STUCK_LOW,
+                                            current_tick_ms);
         return;
     }
 
@@ -389,7 +407,8 @@ static void dht11_begin_transaction(uint32_t current_tick_ms)
     if (HAL_GPIO_ReadPin(s_dht11_context.config.data_port,
                         s_dht11_context.config.data_pin) != GPIO_PIN_RESET)
     {
-        dht11_finish_transaction_with_error(DHT11_ERROR_START_DRIVE);
+        dht11_finish_transaction_with_error(DHT11_ERROR_START_DRIVE,
+                                            current_tick_ms);
         return;
     }
 
@@ -465,7 +484,8 @@ static void dht11_process_completed_frame(uint32_t current_tick_ms)
 
     if (calculated_checksum != s_dht11_context.received_frame[4])
     {
-        dht11_finish_transaction_with_error(DHT11_ERROR_CHECKSUM);
+        dht11_finish_transaction_with_error(DHT11_ERROR_CHECKSUM,
+                                            current_tick_ms);
         return;
     }
 
@@ -480,6 +500,7 @@ static void dht11_process_completed_frame(uint32_t current_tick_ms)
     s_dht11_context.has_latest_valid_data = true;
     s_dht11_context.has_unread_data = true;
     s_dht11_context.state = DHT11_STATE_WAIT_PERIOD;
+    dht11_publish_measurement_result(current_tick_ms, DHT11_ERROR_NONE);
 }
 
 /**
@@ -581,11 +602,13 @@ void DHT11_Service(uint32_t current_tick_ms)
             break;
 
         case DHT11_STATE_ERROR:
-            dht11_finish_transaction_with_error(s_dht11_context.last_error);
+            dht11_finish_transaction_with_error(s_dht11_context.last_error,
+                                                current_tick_ms);
             break;
 
         default:
-            dht11_finish_transaction_with_error(DHT11_ERROR_INTERNAL_STATE);
+            dht11_finish_transaction_with_error(DHT11_ERROR_INTERNAL_STATE,
+                                                current_tick_ms);
             break;
     }
 }
@@ -723,6 +746,29 @@ bool DHT11_TakeNewData(DHT11_Data_t *output_data)
     return has_unread_data;
 }
 
+bool DHT11_TakeMeasurementResult(
+    DHT11_MeasurementResult_t *output_result)
+{
+    uint32_t previous_primask;
+    bool has_unread_result;
+
+    if (output_result == NULL)
+    {
+        return false;
+    }
+
+    previous_primask = dht11_enter_critical();
+    has_unread_result = s_dht11_context.has_unread_measurement_result;
+    if (has_unread_result)
+    {
+        *output_result = s_dht11_context.latest_measurement_result;
+        s_dht11_context.has_unread_measurement_result = false;
+    }
+    dht11_exit_critical(previous_primask);
+
+    return has_unread_result;
+}
+
 void DHT11_GetStatus(DHT11_Status_t *output_status)
 {
     uint32_t previous_primask;
@@ -739,5 +785,7 @@ void DHT11_GetStatus(DHT11_Status_t *output_status)
     output_status->last_success_tick_ms = s_dht11_context.last_success_tick_ms;
     output_status->has_latest_valid_data = s_dht11_context.has_latest_valid_data;
     output_status->has_unread_data = s_dht11_context.has_unread_data;
+    output_status->has_unread_measurement_result =
+        s_dht11_context.has_unread_measurement_result;
     dht11_exit_critical(previous_primask);
 }

@@ -1,6 +1,6 @@
 /**
  * @file app_commands.c
- * @brief Bảng command và handler help/echo ban đầu của project.
+ * @brief Bảng command và handler UART cấp ứng dụng.
  */
 
 #include "app_commands.h"
@@ -14,7 +14,8 @@
 typedef AppCommands_Result_t (*AppCommand_Handler_t)(
     AppCommands_t *commands,
     uint8_t argument_count,
-    const char *const arguments[]);
+    const char *const arguments[],
+    uint32_t current_tick_ms);
 
 /** @brief Một mục menu gắn tên/usage/mô tả với handler application. */
 typedef struct
@@ -28,11 +29,18 @@ typedef struct
 static AppCommands_Result_t app_commands_handle_help(
     AppCommands_t *commands,
     uint8_t argument_count,
-    const char *const arguments[]);
+    const char *const arguments[],
+    uint32_t current_tick_ms);
 static AppCommands_Result_t app_commands_handle_echo(
     AppCommands_t *commands,
     uint8_t argument_count,
-    const char *const arguments[]);
+    const char *const arguments[],
+    uint32_t current_tick_ms);
+static AppCommands_Result_t app_commands_handle_monitor(
+    AppCommands_t *commands,
+    uint8_t argument_count,
+    const char *const arguments[],
+    uint32_t current_tick_ms);
 
 /** @brief Menu command duy nhất của application; help được sinh trực tiếp từ bảng này. */
 static const AppCommand_Descriptor_t s_command_menu[] =
@@ -48,6 +56,12 @@ static const AppCommand_Descriptor_t s_command_menu[] =
         .usage = "echo [arg ...]",
         .description = "Print all received arguments",
         .handler = app_commands_handle_echo
+    },
+    {
+        .name = "monitor",
+        .usage = "monitor <start|stop|status>",
+        .description = "Control the monitoring session",
+        .handler = app_commands_handle_monitor
     }
 };
 
@@ -81,11 +95,13 @@ static bool app_commands_log_succeeded(AppCommands_t *commands,
 static AppCommands_Result_t app_commands_handle_help(
     AppCommands_t *commands,
     uint8_t argument_count,
-    const char *const arguments[])
+    const char *const arguments[],
+    uint32_t current_tick_ms)
 {
     uint8_t index;
 
     (void)arguments;
+    (void)current_tick_ms;
     if (argument_count != 1U)
     {
         app_commands_increment_saturated(
@@ -125,9 +141,12 @@ static AppCommands_Result_t app_commands_handle_help(
 static AppCommands_Result_t app_commands_handle_echo(
     AppCommands_t *commands,
     uint8_t argument_count,
-    const char *const arguments[])
+    const char *const arguments[],
+    uint32_t current_tick_ms)
 {
     uint8_t index;
+
+    (void)current_tick_ms;
 
     if (!app_commands_log_succeeded(
             commands,
@@ -157,8 +176,76 @@ static AppCommands_Result_t app_commands_handle_echo(
     return commands->status.last_result;
 }
 
+static AppCommands_Result_t app_commands_handle_monitor(
+    AppCommands_t *commands,
+    uint8_t argument_count,
+    const char *const arguments[],
+    uint32_t current_tick_ms)
+{
+    MonitoringSession_ChangeResult_t change_result =
+        MONITORING_SESSION_CHANGE_UNCHANGED;
+    MonitoringSession_Status_t session_status;
+
+    if ((argument_count != 2U) ||
+        ((strcmp(arguments[1], "start") != 0) &&
+         (strcmp(arguments[1], "stop") != 0) &&
+         (strcmp(arguments[1], "status") != 0)))
+    {
+        app_commands_increment_saturated(
+            &commands->status.invalid_argument_count);
+        commands->status.last_result =
+            APP_COMMANDS_RESULT_INVALID_ARGUMENT_COUNT;
+        (void)app_commands_log_succeeded(
+            commands,
+            UartLog_Printf(commands->logger,
+                           "ERR usage: monitor <start|stop|status>\r\n"));
+        return commands->status.last_result;
+    }
+
+    if (strcmp(arguments[1], "start") == 0)
+    {
+        change_result = MonitoringSession_SetActive(
+            commands->monitoring_session,
+            true,
+            MONITORING_SESSION_SOURCE_REMOTE_COMMAND,
+            current_tick_ms);
+    }
+    else if (strcmp(arguments[1], "stop") == 0)
+    {
+        change_result = MonitoringSession_SetActive(
+            commands->monitoring_session,
+            false,
+            MONITORING_SESSION_SOURCE_REMOTE_COMMAND,
+            current_tick_ms);
+    }
+
+    if (change_result == MONITORING_SESSION_CHANGE_INVALID)
+    {
+        commands->status.last_result = APP_COMMANDS_RESULT_NOT_INITIALIZED;
+        return commands->status.last_result;
+    }
+
+    MonitoringSession_GetStatus(commands->monitoring_session,
+                                &session_status);
+    if (!app_commands_log_succeeded(
+            commands,
+            UartLog_Printf(commands->logger,
+                           "MONITOR %s session=%u\r\n",
+                           session_status.state == MONITORING_SESSION_ACTIVE
+                               ? "ACTIVE"
+                               : "INACTIVE",
+                           (unsigned int)session_status.session_id)))
+    {
+        return commands->status.last_result;
+    }
+
+    commands->status.last_result = APP_COMMANDS_RESULT_OK;
+    return commands->status.last_result;
+}
+
 AppCommands_Result_t AppCommands_Initialize(AppCommands_t *commands,
-                                            UartLog_t *logger)
+                                            UartLog_t *logger,
+                                            MonitoringSession_t *monitoring_session)
 {
     UartLog_Status_t logger_status = {0};
 
@@ -171,7 +258,7 @@ AppCommands_Result_t AppCommands_Initialize(AppCommands_t *commands,
     commands->status.last_result = APP_COMMANDS_RESULT_INVALID_ARGUMENT;
     commands->status.last_log_result = UART_LOG_RESULT_NOT_INITIALIZED;
 
-    if (logger == NULL)
+    if ((logger == NULL) || (monitoring_session == NULL))
     {
         return commands->status.last_result;
     }
@@ -183,6 +270,7 @@ AppCommands_Result_t AppCommands_Initialize(AppCommands_t *commands,
     }
 
     commands->logger = logger;
+    commands->monitoring_session = monitoring_session;
     commands->status.is_initialized = true;
     commands->status.last_result = APP_COMMANDS_RESULT_OK;
     return commands->status.last_result;
@@ -190,7 +278,8 @@ AppCommands_Result_t AppCommands_Initialize(AppCommands_t *commands,
 
 AppCommands_Result_t AppCommands_HandleConsoleEvent(
     AppCommands_t *commands,
-    const CommandConsole_Event_t *event)
+    const CommandConsole_Event_t *event,
+    uint32_t current_tick_ms)
 {
     uint8_t index;
 
@@ -270,7 +359,8 @@ AppCommands_Result_t AppCommands_HandleConsoleEvent(
                 &commands->status.executed_command_count);
             return s_command_menu[index].handler(commands,
                                                   event->argument_count,
-                                                  event->arguments);
+                                                  event->arguments,
+                                                  current_tick_ms);
         }
     }
 

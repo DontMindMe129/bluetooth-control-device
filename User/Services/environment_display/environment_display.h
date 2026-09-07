@@ -55,6 +55,7 @@ typedef struct
     bool has_rendered_frame;   /**< Da ve thanh cong it nhat mot frame. */
     bool warning_text_is_visible; /**< Pha hiện tại có vẽ phần chữ của badge. */
     bool warning_blink_timer_is_active; /**< Timer blink chỉ chạy khi page được render. */
+    bool monitoring_is_active; /**< Trạng thái giám sát đang trình bày trên header. */
     uint32_t last_render_tick_ms; /**< Tick cua lan ve framebuffer gan nhat. */
     uint32_t warning_blink_tick_ms; /**< Tick bắt đầu pha blink hiện tại. */
     uint32_t rendered_frame_count; /**< Tong so frame da ve, tang bao hoa tai UINT32_MAX. */
@@ -93,11 +94,13 @@ bool EnvironmentDisplay_Initialize(EnvironmentDisplay_t *display);
  * @param display Context da khoi tao.
  * @param environment Snapshot moi nhat tu environment monitor.
  * @param feedback Snapshot moi nhat tu environment feedback.
+ * @param monitoring_is_active true khi đang ghi history và cho phép warning tự động.
  */
 void EnvironmentDisplay_Update(
     EnvironmentDisplay_t *display,
     const EnvironmentMonitor_Status_t *environment,
-    const EnvironmentFeedback_Status_t *feedback);
+    const EnvironmentFeedback_Status_t *feedback,
+    bool monitoring_is_active);
 
 /**
  * @brief Thu ve frame dang cho khi da qua khoang cach refresh toi thieu.

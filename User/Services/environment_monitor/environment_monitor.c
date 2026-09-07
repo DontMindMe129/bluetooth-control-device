@@ -24,6 +24,8 @@ static bool environment_monitor_has_elapsed(uint32_t now,
                                             uint32_t duration);
 static EnvironmentMonitor_Condition_t environment_monitor_classify(
     const DHT11_Data_t *data);
+static EnvironmentMonitor_TemperatureLevel_t
+environment_monitor_classify_temperature(const DHT11_Data_t *data);
 
 /**
  * @brief Kiểm tra thời gian trôi qua bằng phép trừ an toàn khi HAL tick tràn.
@@ -64,10 +66,31 @@ static EnvironmentMonitor_Condition_t environment_monitor_classify(
     return ENVIRONMENT_CONDITION_NORMAL;
 }
 
+/** @brief Phân loại nhiệt độ thành LOW, NORMAL hoặc HIGH theo ngưỡng cấu hình. */
+static EnvironmentMonitor_TemperatureLevel_t
+environment_monitor_classify_temperature(const DHT11_Data_t *data)
+{
+    if (data->temperature_integer <
+        ENVIRONMENT_MONITOR_NORMAL_TEMPERATURE_MIN_C)
+    {
+        return ENVIRONMENT_TEMPERATURE_LOW;
+    }
+
+    if (data->temperature_integer >=
+        ENVIRONMENT_MONITOR_HIGH_TEMPERATURE_C)
+    {
+        return ENVIRONMENT_TEMPERATURE_HIGH;
+    }
+
+    return ENVIRONMENT_TEMPERATURE_NORMAL;
+}
+
 void EnvironmentMonitor_Initialize(void)
 {
     s_environment_monitor = (EnvironmentMonitor_InternalContext_t){0};
     s_environment_monitor.status.data_state = ENVIRONMENT_DATA_NO_DATA;
+    s_environment_monitor.status.temperature_level =
+        ENVIRONMENT_TEMPERATURE_UNKNOWN;
     s_environment_monitor.status.condition = ENVIRONMENT_CONDITION_UNKNOWN;
     s_environment_monitor.status.last_sensor_error = DHT11_ERROR_NONE;
 }
@@ -92,12 +115,16 @@ void EnvironmentMonitor_Service(uint32_t current_tick_ms,
             sensor_status->last_success_tick_ms;
         s_environment_monitor.status.condition =
             environment_monitor_classify(new_data);
+        s_environment_monitor.status.temperature_level =
+            environment_monitor_classify_temperature(new_data);
         s_environment_monitor.has_received_valid_data = true;
     }
 
     if (!s_environment_monitor.has_received_valid_data)
     {
         s_environment_monitor.status.data_state = ENVIRONMENT_DATA_NO_DATA;
+        s_environment_monitor.status.temperature_level =
+            ENVIRONMENT_TEMPERATURE_UNKNOWN;
         s_environment_monitor.status.condition = ENVIRONMENT_CONDITION_UNKNOWN;
         return;
     }

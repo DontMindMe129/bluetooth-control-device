@@ -13,60 +13,24 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "adxl345.h"
+#include "app_adxl_manager.h"
 #include "app_commands.h"
+#include "app_display_controller.h"
+#include "app_oled_manager.h"
+#include "app_shared_i2c_manager.h"
+#include "app_ui_controller.h"
+#include "app_warning_controller.h"
 #include "command_console.h"
 #include "dht11.h"
-#include "environment_display.h"
-#include "environment_feedback.h"
+#include "environment_history.h"
 #include "environment_monitor.h"
-#include "i2c_bus.h"
-#include "i2c_bus_recovery.h"
-#include "motion_display.h"
 #include "motion_monitor.h"
+#include "monitoring_session.h"
 #include "output_control.h"
-#include "output_display.h"
 #include "pwm_output.h"
-#include "ssd1306.h"
 #include "stm32f1xx_hal.h"
 #include "uart_stream.h"
 #include "uart_log.h"
-#include "warning_feedback.h"
-
-/** @brief Các bước khởi động và vận hành giao diện OLED tại địa chỉ cố định. */
-typedef enum
-{
-    APP_OLED_NOT_STARTED = 0, /**< Chưa có I2C handle hợp lệ để bắt đầu. */
-    APP_OLED_INITIALIZING,    /**< Đang khởi tạo SSD1306 tại địa chỉ đã xác nhận. */
-    APP_OLED_ACTIVE,          /**< OLED sẵn sàng và page được chọn đang hoạt động. */
-    APP_OLED_RETRY_WAIT,      /**< Chờ trước khi thử nhanh lại giao tiếp OLED. */
-    APP_OLED_BUS_RECOVERY_WAIT, /**< Chờ trước lần bus-clear vật lý kế tiếp. */
-    APP_OLED_BUS_RECOVERING,  /**< PB6/PB7 đang được state machine bus-clear điều khiển. */
-    APP_OLED_OFFLINE_WAIT,    /**< OLED offline; chờ đến chu kỳ probe 2 giây. */
-    APP_OLED_OFFLINE_PROBING, /**< Đang probe địa chỉ OLED mà không gửi lại framebuffer. */
-    APP_OLED_ERROR            /**< Lỗi cấu hình/phần mềm không thể tự phục hồi. */
-} App_OledState_t;
-
-/** @brief Nguyên nhân gần nhất của lỗi OLED, kể cả lỗi đang được tự phục hồi. */
-typedef enum
-{
-    APP_OLED_ERROR_NONE = 0,       /**< Chưa có lỗi. */
-    APP_OLED_ERROR_INVALID_I2C,    /**< Handle không phải peripheral I2C dùng chung của board. */
-    APP_OLED_ERROR_BUS_INIT,       /**< Không thể tạo context I2C bus. */
-    APP_OLED_ERROR_DISPLAY_INIT,   /**< SSD1306 từ chối cấu hình hoặc init thất bại. */
-    APP_OLED_ERROR_DRAW,           /**< Không thể vẽ giao diện vào framebuffer. */
-    APP_OLED_ERROR_REFRESH_REQUEST,/**< Driver từ chối yêu cầu refresh framebuffer. */
-    APP_OLED_ERROR_REFRESH_RESULT  /**< Refresh đã bắt đầu nhưng kết thúc với lỗi. */
-} App_OledError_t;
-
-/** @brief Các page người dùng có thể chọn bằng nút Left/Right. */
-typedef enum
-{
-    APP_DISPLAY_PAGE_ENVIRONMENT = 0, /**< Nhiệt độ, độ ẩm và trạng thái môi trường. */
-    APP_DISPLAY_PAGE_MOTION,          /**< Gia tốc ba trục từ ADXL345. */
-    APP_DISPLAY_PAGE_OUTPUTS,         /**< Lựa chọn và bật/tắt năm ngõ ra số. */
-    APP_DISPLAY_PAGE_COUNT            /**< Số page; không phải một page hợp lệ. */
-} App_DisplayPage_t;
 
 /** @brief Các mức sáng tuần tự của kịch bản kiểm thử ngõ PWM bằng LED. */
 typedef enum
@@ -98,44 +62,23 @@ typedef struct
     App_ServoPwmLedTestStep_t servo_pwm_led_test_step; /**< Mức sáng hiện tại của test. */
     PwmOutput_Result_t servo_pwm_led_test_last_result; /**< Kết quả đổi duty cycle gần nhất. */
     EnvironmentMonitor_Status_t environment;     /**< Dữ liệu và phân loại môi trường. */
-    EnvironmentFeedback_Status_t feedback;       /**< Pattern và cảnh báo manual hiện tại. */
-    WarningFeedback_Status_t warning_feedback;   /**< Nguồn warning và pattern 5 LED hiện tại. */
-    EnvironmentDisplay_Status_t environment_display; /**< Trạng thái render giao diện môi trường. */
-    MotionDisplay_Status_t motion_display;       /**< Trạng thái render page gia tốc. */
+    EnvironmentHistory_Status_t environment_history; /**< Trạng thái ring buffer history. */
+    MonitoringSession_Status_t monitoring_session; /**< Phiên giám sát hiện tại. */
+    AppWarningController_Status_t warning;       /**< Policy, history, pattern và mask warning tập trung. */
+    AppDisplayController_Status_t display;       /**< Trạng thái tập trung của năm page OLED. */
     OutputControl_Status_t output_control;       /**< Ngõ ra đang chọn và bitmask ON/OFF. */
-    OutputDisplay_Status_t output_display;       /**< Trạng thái render trang Outputs. */
-    uint8_t effective_output_mask;               /**< Mask thực tế xuất GPIO sau khi phân xử warning. */
-    Adxl345_InitializeResult_t adxl345_initialize_result; /**< Kết quả bắt đầu driver ADXL345. */
-    Adxl345_Status_t adxl345;                    /**< Nhận dạng, dữ liệu và lỗi ADXL345. */
+    AppAdxlManager_Status_t adxl345;             /**< Vòng đời, dữ liệu và lỗi ADXL345 tập trung. */
     MotionMonitor_Result_t motion_monitor_initialize_result; /**< Kết quả khởi tạo thuật toán chuyển động. */
     MotionMonitor_Status_t motion_monitor;       /**< Tư thế và mức chuyển động suy ra từ XYZ. */
-    bool environment_display_initialized;        /**< Service trình bày môi trường đã khởi tạo. */
-    bool motion_display_initialized;             /**< Service trình bày gia tốc đã khởi tạo. */
     bool output_control_initialized;             /**< Service điều khiển năm output đã khởi tạo. */
-    bool output_display_initialized;             /**< Service trình bày trang Outputs đã khởi tạo. */
-    bool warning_feedback_initialized;           /**< Bộ tổng hợp nguồn warning đã khởi tạo. */
-    bool oled_canvas_initialized;                 /**< Canvas đồ họa đã ghép với framebuffer OLED. */
+    bool monitoring_session_initialized;         /**< Bộ quản lý phiên giám sát đã khởi tạo. */
+    AppUiController_Status_t ui;                 /**< Trạng thái nút, gesture và page hiện tại. */
     uint8_t digital_output_initialized_mask;     /**< Bit n bằng 1 khi driver output n khởi tạo được. */
     bool heartbeat_led_initialized;               /**< Driver LED heartbeat đã khởi tạo. */
-    bool ui_ok_button_initialized;                /**< Nút OK/manual warning trên PB0 đã khởi tạo. */
-    bool ui_left_button_initialized;              /**< Nút Left trên PB3 đã khởi tạo. */
-    bool ui_right_button_initialized;             /**< Nút Right trên PB4 đã khởi tạo. */
-    bool ui_up_button_initialized;                /**< Nút Up trên PB5 đã khởi tạo. */
-    bool ui_down_button_initialized;              /**< Nút Down trên PA15 đã khởi tạo. */
     bool heartbeat_generator_initialized;         /**< Bộ tạo chu kỳ heartbeat đã khởi tạo. */
     bool heartbeat_led_is_active;                 /**< LED heartbeat hiện đang sáng. */
-    bool shared_i2c_bus_initialized;              /**< Context I2C1 dùng chung đã khởi tạo. */
-    I2cBus_Status_t shared_i2c_bus;               /**< Snapshot giao dịch và lỗi của bus dùng chung. */
-    I2cBusRecovery_State_t shared_i2c_bus_recovery_state; /**< Bước bus-clear I2C1 hiện tại. */
-    uint8_t oled_fast_attempt_count;              /**< Số lần thử nhanh trong đợt lỗi hiện tại. */
-    uint8_t oled_consecutive_nack_count;          /**< Số NACK OLED liên tiếp. */
-    uint8_t shared_i2c_bus_recovery_attempt_count; /**< Số lần bus-clear trong đợt lỗi hiện tại. */
-    uint8_t oled_selected_address_7bit;           /**< Địa chỉ SSD1306 7-bit cố định đang sử dụng. */
-    Ssd1306_InitializeResult_t oled_initialize_result; /**< Kết quả kiểm tra cấu hình SSD1306. */
-    Ssd1306_Status_t oled;                        /**< Snapshot driver SSD1306. */
-    App_DisplayPage_t current_display_page;       /**< Page OLED đang được chọn. */
-    App_OledState_t oled_state;                   /**< Bước hiện tại của luồng OLED. */
-    App_OledError_t oled_error;                   /**< Nguyên nhân lỗi cụ thể của luồng OLED. */
+    AppSharedI2cManager_Status_t shared_i2c;      /**< Bus I2C1 và state machine bus-clear dùng chung. */
+    AppOledManager_Status_t oled;                 /**< Vòng đời, lỗi, retry và driver OLED tập trung. */
 } App_Status_t;
 
 /**

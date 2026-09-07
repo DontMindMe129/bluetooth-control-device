@@ -14,6 +14,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "command_console.h"
+#include "monitoring_session.h"
 #include "uart_log.h"
 
 /** @brief Kết quả khởi tạo hoặc xử lý một event console. */
@@ -45,17 +46,20 @@ typedef struct
 typedef struct
 {
     UartLog_t *logger;             /**< Logger dùng chung cho phản hồi command. */
+    MonitoringSession_t *monitoring_session; /**< Phiên giám sát do command điều khiển. */
     AppCommands_Status_t status;   /**< Trạng thái và thống kê. */
 } AppCommands_t;
 
 /** @brief Ghép module command của application với UART logger. */
 AppCommands_Result_t AppCommands_Initialize(AppCommands_t *commands,
-                                            UartLog_t *logger);
+                                            UartLog_t *logger,
+                                            MonitoringSession_t *monitoring_session);
 
 /** @brief Xử lý một event từ CommandConsole và phát phản hồi tương ứng. */
 AppCommands_Result_t AppCommands_HandleConsoleEvent(
     AppCommands_t *commands,
-    const CommandConsole_Event_t *event);
+    const CommandConsole_Event_t *event,
+    uint32_t current_tick_ms);
 
 /** @brief Sao chép snapshot trạng thái command application. */
 void AppCommands_GetStatus(const AppCommands_t *commands,

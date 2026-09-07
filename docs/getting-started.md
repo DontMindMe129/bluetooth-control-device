@@ -87,12 +87,12 @@ Context ứng dụng nằm trong biến tĩnh `s_app` của `User/App/app.c`. Kh
 ```text
 s_app.status.environment
 s_app.status.adxl345
+s_app.status.adxl345.driver
 s_app.status.motion_monitor
-s_app.status.warning_feedback
+s_app.status.warning
 s_app.status.output_control
-s_app.status.oled_state
-s_app.status.shared_i2c_bus
-s_app.status.shared_i2c_bus_recovery_state
+s_app.status.oled
+s_app.status.shared_i2c
 s_app.status.pc_serial
 ```
 

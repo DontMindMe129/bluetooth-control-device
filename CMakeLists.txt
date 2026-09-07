@@ -51,9 +51,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/Services/display_graphics/mono_graphics.h
     User/App/app.c
     User/App/app.h
+    User/App/app_adxl_manager.c
+    User/App/app_adxl_manager.h
     User/App/app_commands.c
     User/App/app_commands.h
     User/App/app_config.h
+    User/App/app_display_controller.c
+    User/App/app_display_controller.h
+    User/App/app_oled_manager.c
+    User/App/app_oled_manager.h
+    User/App/app_shared_i2c_manager.c
+    User/App/app_shared_i2c_manager.h
+    User/App/app_ui_controller.c
+    User/App/app_ui_controller.h
+    User/App/app_warning_controller.c
+    User/App/app_warning_controller.h
     User/Board/board_config.h
     User/Drivers/adxl345/adxl345.c
     User/Drivers/adxl345/adxl345.h
@@ -75,16 +87,24 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/Drivers/uart_stream/uart_stream.h
     User/Services/command_console/command_console.c
     User/Services/command_console/command_console.h
+    User/Services/button_gesture/button_gesture.c
+    User/Services/button_gesture/button_gesture.h
     User/Services/environment_display/environment_display.c
     User/Services/environment_display/environment_display.h
     User/Services/environment_feedback/environment_feedback.c
     User/Services/environment_feedback/environment_feedback.h
+    User/Services/environment_history/environment_history.c
+    User/Services/environment_history/environment_history.h
+    User/Services/environment_history_display/environment_history_display.c
+    User/Services/environment_history_display/environment_history_display.h
     User/Services/environment_monitor/environment_monitor.c
     User/Services/environment_monitor/environment_monitor.h
     User/Services/motion_display/motion_display.c
     User/Services/motion_display/motion_display.h
     User/Services/motion_monitor/motion_monitor.c
     User/Services/motion_monitor/motion_monitor.h
+    User/Services/monitoring_session/monitoring_session.c
+    User/Services/monitoring_session/monitoring_session.h
     User/Services/output_control/output_control.c
     User/Services/output_control/output_control.h
     User/Services/output_display/output_display.c
@@ -95,6 +115,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/Services/uart_log/uart_log.h
     User/Services/warning_feedback/warning_feedback.c
     User/Services/warning_feedback/warning_feedback.h
+    User/Services/warning_history/warning_history.c
+    User/Services/warning_history/warning_history.h
+    User/Services/warning_history_display/warning_history_display.c
+    User/Services/warning_history_display/warning_history_display.h
 )
 
 # Add include paths
@@ -112,17 +136,23 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Drivers/ssd1306
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Drivers/uart_stream
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/command_console
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/button_gesture
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/display_graphics
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/environment_display
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/environment_feedback
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/environment_history
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/environment_history_display
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/environment_monitor
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/motion_display
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/motion_monitor
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/monitoring_session
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/output_control
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/output_display
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/system_heartbeat
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/uart_log
     ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/warning_feedback
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/warning_history
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/Services/warning_history_display
 )
 
 # Add project symbols (macros)

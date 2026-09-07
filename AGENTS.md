@@ -28,20 +28,20 @@ Treat the following as intended resource allocation, not as proof that detailed 
 
 | Function | Resource |
 | --- | --- |
-| PC serial link | USART2 on PA2/PA3 through USB-to-UART |
+| PC serial link | USART1 on PA9/PA10 through USB-to-UART |
 | OLED | I2C1 on PB6/PB7 |
-| ADXL345 | I2C2 on PB10/PB11, with EXTI on PA1 |
+| ADXL345 | Shared I2C1 on PB6/PB7, with EXTI on PB13 |
 | DHT11 | TIM3 channel 4 input capture on PB1 |
-| Servo/PWM output | TIM2 channel 1 PWM on PA0 |
-| Buttons | PA4-PA7 and PB0 through EXTI |
-| Five digital outputs | PB12-PB15 and PA8 |
+| Servo/PWM output | TIM1 channel 1 PWM on PA8 |
+| Buttons | PB0, PB3, PB4, PB5, and PA15 through EXTI |
+| Five digital outputs | PB8-PB12 |
 | Heartbeat LED | PC13, active-low |
 
 - Re-read the `.ioc` and generated source after every CubeMX regeneration before relying on the details below.
 - The generated runtime currently uses HSI as the 8 MHz system clock. PD0/PD1 are reserved as HSE oscillator pins in the `.ioc`; do not infer that HSE is active.
-- The five UI buttons on PA4-PA7 and PB0 are generated as falling-edge EXTI inputs with internal pull-ups. Their EXTI IRQs use preemption priority 1, subpriority 0.
-- The ADXL345 interrupt input on PA1 is generated as EXTI1 with no internal pull and shares EXTI priority 1, subpriority 0.
-- TIM3 input capture uses priority 0, subpriority 0. I2C1 event/error, I2C2 event/error, and USART2 use priority 2, subpriority 0. The corresponding generated IRQ handlers are present.
+- The five UI buttons on PB0, PB3, PB4, PB5, and PA15 are generated as falling-edge EXTI inputs with internal pull-ups. Their EXTI IRQs use preemption priority 1, subpriority 0.
+- The ADXL345 interrupt input on PB13 is generated as rising-edge EXTI13 with no internal pull and shares EXTI priority 1, subpriority 0.
+- TIM3 input capture uses priority 0, subpriority 0. I2C1 event/error and USART1 use priority 2, subpriority 0. The corresponding generated IRQ handlers are present.
 - SWD remains enabled on PA13/PA14, with JTAG disabled. Preserve SWD access unless the user explicitly approves a configuration change.
 
 ## Ownership and edit boundaries

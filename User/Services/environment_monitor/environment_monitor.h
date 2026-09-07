@@ -14,12 +14,19 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "dht11.h"
 
 /** @brief Ngưỡng nhiệt độ nguyên dùng để kích hoạt trạng thái WARM. */
 #define ENVIRONMENT_MONITOR_WARM_TEMPERATURE_C       (28U)
+
+/** @brief Dưới ngưỡng này, nhiệt độ được phân loại LOW. */
+#define ENVIRONMENT_MONITOR_NORMAL_TEMPERATURE_MIN_C (20U)
+
+/** @brief Từ ngưỡng này, nhiệt độ được phân loại HIGH. */
+#define ENVIRONMENT_MONITOR_HIGH_TEMPERATURE_C       (28U)
 
 /** @brief Ngưỡng độ ẩm nguyên dùng để kích hoạt trạng thái HUMID. */
 #define ENVIRONMENT_MONITOR_HUMIDITY_PERCENT         (65U)
@@ -36,6 +43,15 @@ typedef enum
     ENVIRONMENT_DATA_FRESH,       /**< Mẫu gần nhất chưa vượt quá stale timeout. */
     ENVIRONMENT_DATA_STALE        /**< Mẫu gần nhất đã vượt quá stale timeout. */
 } EnvironmentMonitor_DataState_t;
+
+/** @brief Mức nhiệt độ độc lập với độ ẩm và độ mới của dữ liệu. */
+typedef enum
+{
+    ENVIRONMENT_TEMPERATURE_UNKNOWN = 0, /**< Chưa có mẫu nhiệt độ hợp lệ. */
+    ENVIRONMENT_TEMPERATURE_LOW,         /**< Nhiệt độ nhỏ hơn 20 độ C. */
+    ENVIRONMENT_TEMPERATURE_NORMAL,      /**< Nhiệt độ từ 20 đến dưới 28 độ C. */
+    ENVIRONMENT_TEMPERATURE_HIGH         /**< Nhiệt độ từ 28 độ C trở lên. */
+} EnvironmentMonitor_TemperatureLevel_t;
 
 /**
  * @brief Kết luận đơn giản được suy ra từ nhiệt độ và độ ẩm gần nhất.
@@ -59,6 +75,7 @@ typedef struct
 {
     DHT11_Data_t latest_data;                    /**< Bốn byte dữ liệu DHT11 hợp lệ gần nhất. */
     EnvironmentMonitor_DataState_t data_state;  /**< Độ mới hiện tại của latest_data. */
+    EnvironmentMonitor_TemperatureLevel_t temperature_level; /**< LOW/NORMAL/HIGH của mẫu hợp lệ gần nhất. */
     EnvironmentMonitor_Condition_t condition;   /**< Kết luận từ các ngưỡng kiểm thử. */
     DHT11_Error_t last_sensor_error;             /**< Lỗi gần nhất được báo bởi driver DHT11. */
     uint16_t consecutive_sensor_errors;          /**< Số giao dịch DHT11 lỗi liên tiếp. */
@@ -82,7 +99,6 @@ void EnvironmentMonitor_Initialize(void);
  * @param current_tick_ms HAL tick hiện tại.
  * @param new_data Con trỏ tới mẫu DHT11 mới, hoặc NULL nếu không có mẫu mới.
  * @param sensor_status Snapshot trạng thái hiện tại của driver DHT11.
- *
  * @note Hàm không lưu các con trỏ đầu vào sau khi trả về.
  */
 void EnvironmentMonitor_Service(uint32_t current_tick_ms,

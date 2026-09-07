@@ -69,27 +69,40 @@ Chỉ fault-injection khi hiểu mạch. Nên dùng điện trở khoảng 1 kΩ
 
 - [ ] Firmware bus-clear tối đa 2 lần, cách nhau 300 ms.
 - [ ] Mỗi lần phát không quá 9 xung SCL rồi tạo STOP.
-- [ ] Không phục hồi được thì OLED offline.
-- [ ] Trong lúc bus-clear, ADXL345 không mở giao dịch I2C mới; dữ liệu Motion có thể tạm stale.
+- [ ] Không phục hồi được thì cả hai device manager chuyển sang chính sách offline riêng.
+- [ ] Trong lúc bus-clear, OLED và ADXL345 không mở giao dịch I2C mới; dữ liệu hiển thị/Motion có thể tạm stale.
 - [ ] UART, DHT11, nút và heartbeat vẫn chạy vì không phụ thuộc I2C1.
 - [ ] Bỏ lỗi: OLED online lại và ADXL345 được khởi tạo lại tại `0x53`.
+
+### 9. Lỗi riêng của ADXL345
+
+- [ ] Một hoặc hai lần đọc lỗi rời rạc không làm bus-clear và được xóa bộ đếm khi có mẫu tốt.
+- [ ] 3 lần đọc lỗi liên tiếp làm ADXL345 restart sau 100 ms.
+- [ ] Stale liên tục 2 giây cũng làm cảm biến restart.
+- [ ] Khi không nhận dạng/cấu hình được, manager thử lại mỗi 2 giây mà OLED vẫn tiếp tục hoạt động.
+- [ ] Sau khi nối lại, 3 mẫu tốt liên tiếp chuyển ADXL345 sang online.
 
 ## Biến debugger quan trọng
 
 ```text
-s_app.status.oled_state
-s_app.status.oled_error
-s_app.status.oled_fast_attempt_count
-s_app.status.oled_consecutive_nack_count
-s_app.status.shared_i2c_bus
-s_app.status.shared_i2c_bus_recovery_attempt_count
-s_app.status.shared_i2c_bus_recovery_state
+s_app.status.oled.state
+s_app.status.oled.error
+s_app.status.oled.fast_attempt_count
+s_app.status.oled.consecutive_nack_count
+s_app.status.oled.driver
+s_app.status.shared_i2c.state
+s_app.status.shared_i2c.recovery_attempt_count
+s_app.status.shared_i2c.bus
+s_app.status.shared_i2c.physical_recovery_state
 s_app.status.environment
-s_app.status.adxl345
+s_app.status.adxl345.state
+s_app.status.adxl345.consecutive_read_error_count
+s_app.status.adxl345.good_sample_count
+s_app.status.adxl345.driver
 s_app.status.motion_monitor
-s_app.status.warning_feedback.active_source_mask
+s_app.status.warning.output_pattern.active_source_mask
 s_app.status.output_control.output_on_mask
-s_app.status.effective_output_mask
+s_app.status.warning.effective_output_mask
 ```
 
 ## Tiêu chí đạt cuối cùng

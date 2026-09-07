@@ -33,6 +33,9 @@
 /** @brief Thời gian debounce dùng chung cho năm nút điều hướng UI. */
 #define APP_UI_BUTTON_DEBOUNCE_MS              (30UL)
 
+/** @brief Thời gian giữ nút OK để bật/tắt phiên giám sát toàn hệ thống. */
+#define APP_MONITORING_TOGGLE_HOLD_MS          (1500UL)
+
 /** @brief Timeout đã duyệt cho mỗi giao dịch I2C của ADXL345. */
 #define APP_ADXL345_TRANSFER_TIMEOUT_MS        (20UL)
 
@@ -44,6 +47,21 @@
 
 /** @brief Thời gian không có mẫu trước khi dữ liệu ADXL345 bị xem là stale. */
 #define APP_ADXL345_STALE_TIMEOUT_MS           (200UL)
+
+/** @brief Stale liên tục đủ lâu để manager chủ động cấu hình lại ADXL345. */
+#define APP_ADXL345_PERSISTENT_STALE_RESTART_MS (2000UL)
+
+/** @brief Khoảng chờ trước khi manager restart riêng ADXL345. */
+#define APP_ADXL345_DEVICE_RESTART_DELAY_MS     (100UL)
+
+/** @brief Chu kỳ thử nhận dạng và cấu hình lại ADXL345 khi offline. */
+#define APP_ADXL345_OFFLINE_PROBE_PERIOD_MS     (2000UL)
+
+/** @brief Số lần đọc XYZ lỗi liên tiếp trước khi restart riêng cảm biến. */
+#define APP_ADXL345_READ_ERROR_LIMIT            (3U)
+
+/** @brief Số mẫu tốt liên tiếp để xác nhận ADXL345 đã phục hồi ổn định. */
+#define APP_ADXL345_RECOVERY_GOOD_SAMPLE_COUNT  (3U)
 
 /** @brief Hệ số lọc trọng lực IIR đã duyệt: gravity += delta / 16. */
 #define APP_MOTION_GRAVITY_FILTER_DIVISOR      (16U)

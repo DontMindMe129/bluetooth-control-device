@@ -120,3 +120,10 @@ bool ButtonInput_TakePressedEvent(ButtonInput_t *button)
     button->pressed_event_pending = false;
     return pressed_event;
 }
+
+bool ButtonInput_IsPressed(const ButtonInput_t *button)
+{
+    return (button != NULL) && button->is_initialized &&
+           (HAL_GPIO_ReadPin(button->config.port, button->config.pin) ==
+            button->config.pressed_level);
+}
