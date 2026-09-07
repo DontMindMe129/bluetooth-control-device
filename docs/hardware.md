@@ -33,6 +33,117 @@
 | PA13 | — | SWDIO | System debug |
 | PA14 | — | SWCLK | System debug |
 
+## Sơ đồ nối dây hiện tại
+
+Sơ đồ dưới đây dùng tên chân MCU in trên Blue Pill, không phụ thuộc vị trí vật lý
+của hai hàng header. Tất cả module phải dùng chung GND.
+
+```mermaid
+flowchart LR
+    BP[STM32F103C8T6<br/>Blue Pill]
+    OLED[OLED SSD1306<br/>0x3C]
+    ADXL[GY-291 ADXL345<br/>0x53]
+    DHT[DHT11 module]
+    UART[USB-to-UART<br/>3.3 V TTL]
+    BTN[5 nút nhấn]
+    LED[5 LED ngoài<br/>kèm điện trở]
+    PWM[PWM / servo]
+    STLINK[ST-Link V2]
+
+    BP -- "PB6 SCL · PB7 SDA · 3V3 · GND" --> OLED
+    BP -- "PB6 SCL · PB7 SDA · PB13 INT1 · 3V3 · GND" --> ADXL
+    BP -- "PB1 DATA · 3V3 · GND" --> DHT
+    BP <-->|"PA9 TX → RX · PA10 RX ← TX · GND"| UART
+    BP -- "PB0 · PB3 · PB4 · PB5 · PA15" --> BTN
+    BP -- "PB8…PB12" --> LED
+    BP -- "PA8 PWM · GND chung" --> PWM
+    BP <-->|"PA13 SWDIO · PA14 SWCLK · GND · 3V3 ref"| STLINK
+```
+
+### OLED và ADXL345 trên I2C1 dùng chung
+
+| Blue Pill | OLED SSD1306 | ADXL345 GY-291 | Ghi chú |
+|---|---|---|---|
+| 3V3 | VCC | VCC | Dùng 3,3 V để giữ mức logic I2C an toàn cho STM32 |
+| GND | GND | GND | Mass chung |
+| PB6 | SCL | SCL | I2C1 SCL, 100 kHz |
+| PB7 | SDA | SDA | I2C1 SDA, 100 kHz |
+| PB13 | — | INT1 | DATA_READY, EXTI cạnh lên |
+| 3V3 | — | CS | Kéo mức cao để chọn chế độ I2C |
+| GND | — | SDO/ALT ADDRESS | Mức thấp chọn địa chỉ 7-bit `0x53` |
+
+Không để `CS` hoặc `SDO` của ADXL345 trôi mức. Nếu module đã nối cố định hai chân
+này trên PCB thì không cần nối lặp lại, nhưng phải kiểm tra ký hiệu hoặc schematic
+của đúng module đang dùng.
+
+### DHT11
+
+| Blue Pill | DHT11 module |
+|---|---|
+| 3V3 | VCC |
+| GND | GND |
+| PB1 | DATA |
+
+Module DHT11 hiện dùng đã có điện trở pull-up trên DATA. Không cần mắc thêm một
+điện trở pull-up song song nếu chưa đo hoặc kiểm tra giá trị có sẵn.
+
+### Nút nhấn
+
+Mỗi nút chỉ cần nối giữa chân input tương ứng và GND vì CubeMX đã bật pull-up nội:
+
+| Chức năng | Chân Blue Pill | Đầu còn lại của nút |
+|---|---|---|
+| OK/Enter | PB0 | GND |
+| Left | PB3 | GND |
+| Right | PB4 | GND |
+| Up | PB5 | GND |
+| Down | PA15 | GND |
+
+### Năm LED output
+
+Mỗi ngõ ra active-high được nối riêng theo cùng một mẫu:
+
+```text
+PB8/PB9/PB10/PB11/PB12 ── điện trở 220 Ω…1 kΩ ── anode LED
+                                                        cathode LED ── GND
+```
+
+| Output | Chân Blue Pill |
+|---|---|
+| OUT1 | PB8 |
+| OUT2 | PB9 |
+| OUT3 | PB10 |
+| OUT4 | PB11 |
+| OUT5 | PB12 |
+
+### UART và nạp/debug
+
+| Blue Pill | USB-to-UART |
+|---|---|
+| PA9 / USART1 TX | RX |
+| PA10 / USART1 RX | TX |
+| GND | GND |
+
+USB-to-UART phải dùng mức logic 3,3 V. TX/RX phải nối chéo; không nối chân cấp
+nguồn của adapter nếu Blue Pill đã được cấp nguồn từ một nguồn khác mà chưa xác
+nhận hai nguồn có thể nối chung.
+
+| Blue Pill | ST-Link V2 |
+|---|---|
+| PA13 | SWDIO |
+| PA14 | SWCLK |
+| GND | GND |
+| 3V3 | 3.3V reference |
+
+PC13 là LED heartbeat tích hợp trên board nên không cần nối thêm dây.
+
+### PWM/servo
+
+PA8 là tín hiệu PWM. Nếu đang kiểm thử bằng LED, nối PA8 qua điện trở hạn dòng và
+LED xuống GND giống một output active-high. Nếu chuyển sang servo thật, nối signal
+servo vào PA8, dùng nguồn servo riêng phù hợp và bắt buộc nối GND nguồn servo với
+GND Blue Pill; không lấy dòng động lực servo từ ST-Link.
+
 ## Timer
 
 TIM1 và TIM3 đều dùng prescaler 7 với clock timer 8 MHz:
