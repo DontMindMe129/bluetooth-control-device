@@ -28,7 +28,7 @@
 | PB6 | `I2C_PORT_1_SCL` | I2C dùng chung | I2C1, 100 kHz |
 | PB7 | `I2C_PORT_1_SDA` | I2C dùng chung | I2C1, 100 kHz |
 | PB8–PB12 | `DIGITAL_OUTPUT_1..5` | Output 1–5 | GPIO active-high |
-| PB13 | `INTERRUPT_INPUT_1` | ADXL345 INT1 | EXTI13 rising, no-pull |
+| PB13 | `DIGITAL_INPUT_6` | ADXL345 INT1 | EXTI13 rising, no-pull |
 | PB14/PB15 | `SPI_PORT_1_CS_2/3` | Dự phòng chip-select 2–3 | GPIO output; App chưa sử dụng |
 | PA13 | — | SWDIO | System debug |
 | PA14 | — | SWCLK | System debug |

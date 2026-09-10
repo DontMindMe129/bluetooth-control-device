@@ -491,11 +491,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : INTERRUPT_INPUT_1_Pin */
-  GPIO_InitStruct.Pin = INTERRUPT_INPUT_1_Pin;
+  /*Configure GPIO pin : DIGITAL_INPUT_6_Pin */
+  GPIO_InitStruct.Pin = DIGITAL_INPUT_6_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(INTERRUPT_INPUT_1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(DIGITAL_INPUT_6_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DIGITAL_INPUT_5_Pin */
   GPIO_InitStruct.Pin = DIGITAL_INPUT_5_Pin;

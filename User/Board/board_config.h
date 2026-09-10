@@ -45,11 +45,11 @@ extern "C" {
 /** @brief Địa chỉ I2C 7-bit đã xác nhận của cảm biến ADXL345 khi SDO nối GND. */
 #define BOARD_ADXL345_I2C_ADDRESS_7BIT                (0x53U)
 
-/** @brief Cổng interrupt đa dụng hiện được gán cho tín hiệu interrupt ADXL345. */
-#define BOARD_ADXL345_INTERRUPT_PORT                  INTERRUPT_INPUT_1_GPIO_Port
+/** @brief Cổng vào số đa dụng thứ sáu hiện được gán cho tín hiệu interrupt ADXL345. */
+#define BOARD_ADXL345_INTERRUPT_PORT                  DIGITAL_INPUT_6_GPIO_Port
 
-/** @brief Pin interrupt đa dụng hiện được gán cho tín hiệu interrupt ADXL345. */
-#define BOARD_ADXL345_INTERRUPT_PIN                   INTERRUPT_INPUT_1_Pin
+/** @brief Pin vào số đa dụng thứ sáu hiện được gán cho tín hiệu interrupt ADXL345. */
+#define BOARD_ADXL345_INTERRUPT_PIN                   DIGITAL_INPUT_6_Pin
 
 /* -------------------------------------------------------------------------- */
 /* Cảm biến DHT11                                                             */
